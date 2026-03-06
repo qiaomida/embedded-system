@@ -13,7 +13,7 @@
 #include "tim.h"
 #include "usart.h"
 #include "gpio.h"
-
+#include "key.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include <stdio.h>
@@ -45,7 +45,8 @@ float vdd_v = 0;
 float core_temp = 0;
 volatile uint8_t tim4_tick = 0;
 uint16_t print_counter = 0; // 用于控制打印频率的计数器
-#define PRINT_INTERVAL 130 // 每130次中断打印一次
+#define PRINT_INTERVAL 300 // 每300次中断打印一次
+uint16_t rx;
 // DMA 相关变量
 char dma_msg[64];           // 串口发送缓冲区
 typedef struct {
@@ -56,11 +57,7 @@ typedef struct {
     float Integral;      // 偏差累加
     float Output;        // 最终输出 (0-1000)
 } PID_TypeDef;
-
 PID_TypeDef MyPID;
-
-
-
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -78,6 +75,65 @@ void PID_Init(PID_TypeDef *pid) {
     pid->Kd = 30.0f;     // 适中的 D 抑制震荡
     pid->Integral = 0;
     pid->Last_Error = 0;
+}
+void Control_Loop(void)//PID计算
+{
+    if (adc_values[0] > 0)
+        vdd_v = 1.21f * 4095.0f / (float)adc_values[0];
+
+    float vsense = ((float)adc_values[1] / 4095.0f) * vdd_v;
+    core_temp = ((vsense - 0.76f) / 0.0025f) + 25.0f;
+
+    MyPID.Error = MyPID.Target - core_temp;
+    MyPID.Integral += MyPID.Error;
+
+    if (MyPID.Integral > 150) MyPID.Integral = 150;
+    if (MyPID.Integral < -150) MyPID.Integral = -150;
+
+    float D = MyPID.Error - MyPID.Last_Error;
+
+    MyPID.Output =
+        MyPID.Kp * MyPID.Error +
+        MyPID.Ki * MyPID.Integral +
+        MyPID.Kd * D;
+
+    MyPID.Last_Error = MyPID.Error;
+
+    if (MyPID.Output > 1000) MyPID.Output = 1000;
+    if (MyPID.Output < 0) MyPID.Output = 0;
+
+    __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1,(uint32_t)MyPID.Output);
+}
+void Debug_Print(void)// 调试信息打印
+{
+    if(print_counter >= PRINT_INTERVAL)
+    {
+        print_counter = 0;
+
+        printf("VDD=%.3fV Temp=%.2f\r\n", vdd_v, core_temp);
+        printf("Target:%.1f | Real:%.1f | Out:%.0f\r\n",
+               MyPID.Target, core_temp, MyPID.Output);
+    }
+}
+void key_process(void)
+{
+    if(key_up.state)
+    {
+        if(key_up.press_counter == 1)
+            MyPID.Target += 1;
+
+        if(key_up.press_counter > 50 && key_up.press_counter % 5 == 0)
+            MyPID.Target += 1;
+    }
+
+    if(key_down.state)
+    {
+        if(key_down.press_counter == 1)
+            MyPID.Target -= 1;
+
+        if(key_down.press_counter > 50 && key_down.press_counter % 5 == 0)
+            MyPID.Target -= 1;
+    }
 }
 /* USER CODE END 0 */
 
@@ -115,8 +171,8 @@ int main(void)
   MX_TIM4_Init();
   MX_ADC1_Init();
   MX_TIM2_Init();
-  PID_Init(&MyPID);
   /* USER CODE BEGIN 2 */
+  PID_Init(&MyPID);
  if (HAL_TIM_Base_Start_IT(&htim4) != HAL_OK) {
    Error_Handler();
  }
@@ -125,56 +181,20 @@ int main(void)
  }
  HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_1);
   printf("boot ok\r\n");
- 
 
-
- 
+HAL_UART_Receive_IT(&huart2,(uint8_t *)&rx,1);
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-   
     if (tim4_tick)
     {
       tim4_tick = 0;
        HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc_values, 2);
- if(print_counter>=PRINT_INTERVAL)
-      {
-          print_counter = 0;
-        
-      if (adc_values[0] > 0) {
-        vdd_v = 1.21f * 4095.0f / (float)adc_values[0];
-      }
-
-      {
-        float vsense = ((float)adc_values[1] / 4095.0f) * vdd_v;
-        core_temp = ((vsense - 0.76f) / 0.0025f) + 25.0f;
-      }
-
-      printf("VDD=%.3fV  Temp=%.2f\r\n", vdd_v, core_temp);
-        printf("Target:%.1f | Real:%.1f | Out:%.0f\r\n", 
-         MyPID.Target, core_temp, MyPID.Output);
-    }
-    MyPID.Error = MyPID.Target - core_temp;
-        MyPID.Integral += MyPID.Error;
-        
-        // 积分抗饱和 (重要：防止 I 项无限增大)
-        if (MyPID.Integral > 150) MyPID.Integral = 150;
-        if (MyPID.Integral < -150) MyPID.Integral = -150;
-        
-        float D = MyPID.Error - MyPID.Last_Error;
-        MyPID.Output = (MyPID.Kp * MyPID.Error) + 
-                       (MyPID.Ki * MyPID.Integral) + 
-                       (MyPID.Kd * D);
-        MyPID.Last_Error = MyPID.Error;
-
-        // 3. 输出限幅与硬件驱动
-        if (MyPID.Output > 1000) MyPID.Output = 1000;
-        if (MyPID.Output < 0) MyPID.Output = 0;
-        __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, (uint32_t)MyPID.Output);  
-    }
+        Control_Loop();
+        Debug_Print();    
   }
 
     /* USER CODE END WHILE */
@@ -182,7 +202,7 @@ int main(void)
     /* USER CODE BEGIN 3 */
   /* USER CODE END 3 */
 }
-
+}
 /**
   * @brief System Clock Configuration
   * @retval None
@@ -241,19 +261,26 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
     {
         tim4_tick = 1;
         print_counter++;
-       
+       key_scan();
+       key_process();
     }
 }
 // 如果你想在发送完成后做点什么，可以取消下面函数的注�?
-/*
-void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
+
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
     if(huart->Instance == USART2)
     {
-        // DMA 发送完成后的回调，可以在这里翻转一�?LED 状�?
+        if(rx=='+')
+        {MyPID.Target++;}
+        else if (rx=='-')
+        { MyPID.Target--; }
+        
+        // DMA 接收完成后的回调，可以在这里翻转一?LED 状?
+        HAL_UART_Receive_IT(&huart2,(uint8_t *)&rx,1); // 继续接收下一个字节
     }
 }
-*/
+
 /* USER CODE END 4 */
 
 /**
