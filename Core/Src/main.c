@@ -110,9 +110,9 @@ void Debug_Print(void)// 调试信息打印
     {
         print_counter = 0;
 
-        printf("VDD=%.3fV Temp=%.2f\r\n", vdd_v, core_temp);
-        printf("Target:%.1f | Real:%.1f | Out:%.0f\r\n",
-               MyPID.Target, core_temp, MyPID.Output);
+        //printf("VDD=%.3fV Temp=%.2f\r\n", vdd_v, core_temp);
+        printf("%.1f, %.1f, %.0f\r\n",
+               MyPID.Target, core_temp, MyPID.Output/20.0f); // 输出目标温度、当前温度和 PWM 占空比（0-50）
     }
 }
 void key_process(void)
@@ -194,13 +194,18 @@ HAL_UART_Receive_IT(&huart2,(uint8_t *)&rx,1);
       tim4_tick = 0;
        HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc_values, 2);
         Control_Loop();
-        Debug_Print();    
+                // 2. 串口打印 (每 200ms 运行一次，降低串口负担)
+        static uint16_t ui_cnt = 0;
+        if (ui_cnt++ >= 20) { 
+            Debug_Print();    
+            ui_cnt = 0;    
   }
 
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
   /* USER CODE END 3 */
+}
 }
 }
 /**
