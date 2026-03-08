@@ -14,13 +14,16 @@
 #include "tim.h"
 #include "usart.h"
 #include "gpio.h"
-#include "pid.h"
-#include "key.h"
-#include "control.h"
+
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include <stdio.h>
 #include <string.h>
+#include "pid.h"
+#include "key.h"
+#include "control.h"
+#include "params_store.h"
+#include "stdlib.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -50,6 +53,8 @@ volatile uint8_t tim4_tick = 0;
 uint16_t print_counter = 0; // 用于控制打印频率的计数器
 #define PRINT_INTERVAL 300 // 每300次中断打印一次
 uint16_t rx;
+char cmd_buffer[32];// 存放完整命令的收纳箱
+uint8_t cmd_index = 0;
 // DMA 相关变量
 char dma_msg[64];           // 串口发送缓冲区
 extern PID_TypeDef MyPID;
@@ -66,7 +71,24 @@ void key_process(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
+void Process_UART_Command(char* cmd) {
+    if (cmd[0] == 'P') {
+        MyPID.Kp = atof(&cmd[1]);
+        printf("ACK: Kp updated to %.2f\r\n", MyPID.Kp);
+    } 
+    else if (cmd[0] == 'I') {
+        MyPID.Ki = atof(&cmd[1]);
+        printf("ACK: Ki updated to %.2f\r\n", MyPID.Ki);
+    }
+    else if (cmd[0] == 'T') {
+        MyPID.Target = atof(&cmd[1]);
+        printf("ACK: Target updated to %.1f\r\n", MyPID.Target);
+    }
+    else if (strcmp(cmd, "SAVE") == 0) {
+        Params_Save(); // 调用之前写的保存到Flash函数
+        printf("ACK: All params saved to Flash!\r\n");
+    }
+}
 void Debug_Print(void)// 调试信息打印
 {
     if(print_counter >= PRINT_INTERVAL)
@@ -78,7 +100,7 @@ void Debug_Print(void)// 调试信息打印
                MyPID.Target, core_temp, MyPID.Output/20.0f); // 输出目标温度、当前温度和 PWM 占空比（0-50）
     }
 }
-void key_process(void)
+void key_process(void)//长按处理
 {
     if(key_up.state)
     {
@@ -87,6 +109,7 @@ void key_process(void)
 
         if(key_up.press_counter > 50 && key_up.press_counter % 5 == 0)
             MyPID.Target += 1;
+            Params_Save(); // 每次修改参数后保存到 Flash
     }
 
     if(key_down.state)
@@ -96,6 +119,7 @@ void key_process(void)
 
         if(key_down.press_counter > 50 && key_down.press_counter % 5 == 0)
             MyPID.Target -= 1;
+            Params_Save(); // 每次修改参数后保存到 Flash
     }
 }
 /* USER CODE END 0 */
@@ -136,6 +160,7 @@ int main(void)
   MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
   PID_Init(&MyPID);
+  Params_Load(); // 加载参数到 MyPID
  if (HAL_TIM_Base_Start_IT(&htim4) != HAL_OK) {
    Error_Handler();
  }
@@ -248,11 +273,57 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
         {MyPID.Target++;}
         else if (rx=='-')
         { MyPID.Target--; }
+        else if (rx=='S')
+        {
+            Params_Save(); // 接收到 'S' 时保存参数到 Flash
+            printf(">> Quick Saved!\r\n");
+        }
+        // B. 处理复杂指令 (如 P10.5, T50, 需要回车触发)
+        else if (rx == '\n' || rx == '\r') 
+        {
+            if (cmd_index > 0) 
+            {
+                cmd_buffer[cmd_index] = '\0'; // 闭合字符串
+                
+                if (cmd_buffer[0] == 'P') {
+                    MyPID.Kp = atof(&cmd_buffer[1]);
+                    printf(">> Kp: %.2f\r\n", MyPID.Kp);
+                }
+                else if (cmd_buffer[0] == 'I') {
+                    MyPID.Ki = atof(&cmd_buffer[1]);
+                    printf(">> Ki: %.2f\r\n", MyPID.Ki);
+                }
+                else if (cmd_buffer[0] == 'T') {
+                    MyPID.Target = atof(&cmd_buffer[1]);
+                    printf(">> Target: %.1f\r\n", MyPID.Target);
+                }
+                else if (strcmp(cmd_buffer, "SAVE") == 0) {
+                    Params_Save();
+                    printf(">> Full Params Saved!\r\n");
+                }
+               else if (cmd_buffer[0] == 'D') {
+                    MyPID.Kd = atof(&cmd_buffer[1]);
+                    printf(">> Kd: %.2f\r\n", MyPID.Kd);
+                } 
+                cmd_index = 0; // 重置缓冲区
+            }
+        }
+        // C. 如果不是以上字符，也不是回车，就存入缓冲区待命
+        else 
+        {
+            if (cmd_index < 31) {
+                cmd_buffer[cmd_index++] = (char)rx;
+            }
+        }
+
+
         
         // DMA 接收完成后的回调，可以在这里翻转一?LED 状?
         HAL_UART_Receive_IT(&huart2,(uint8_t *)&rx,1); // 继续接收下一个字节
-    }
+    
 }
+    }
+
 
 /* USER CODE END 4 */
 
