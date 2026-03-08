@@ -71,24 +71,6 @@ void key_process(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-void Process_UART_Command(char* cmd) {
-    if (cmd[0] == 'P') {
-        MyPID.Kp = atof(&cmd[1]);
-        printf("ACK: Kp updated to %.2f\r\n", MyPID.Kp);
-    } 
-    else if (cmd[0] == 'I') {
-        MyPID.Ki = atof(&cmd[1]);
-        printf("ACK: Ki updated to %.2f\r\n", MyPID.Ki);
-    }
-    else if (cmd[0] == 'T') {
-        MyPID.Target = atof(&cmd[1]);
-        printf("ACK: Target updated to %.1f\r\n", MyPID.Target);
-    }
-    else if (strcmp(cmd, "SAVE") == 0) {
-        Params_Save(); // 调用之前写的保存到Flash函数
-        printf("ACK: All params saved to Flash!\r\n");
-    }
-}
 void Debug_Print(void)// 调试信息打印
 {
     if(print_counter >= PRINT_INTERVAL)
@@ -278,6 +260,8 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
             Params_Save(); // 接收到 'S' 时保存参数到 Flash
             printf(">> Quick Saved!\r\n");
         }
+        else if (rx == 'X')
+        {printf(">> Target: %.1f, Kp: %.2f, Ki: %.2f, Kd: %.2f\r\n", MyPID.Target, MyPID.Kp, MyPID.Ki, MyPID.Kd);}
         // B. 处理复杂指令 (如 P10.5, T50, 需要回车触发)
         else if (rx == '\n' || rx == '\r') 
         {
