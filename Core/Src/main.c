@@ -8,12 +8,15 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "cmsis_os.h"
 #include "adc.h"
 #include "dma.h"
 #include "tim.h"
 #include "usart.h"
 #include "gpio.h"
+#include "pid.h"
 #include "key.h"
+#include "control.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include <stdio.h>
@@ -49,61 +52,21 @@ uint16_t print_counter = 0; // 用于控制打印频率的计数器
 uint16_t rx;
 // DMA 相关变量
 char dma_msg[64];           // 串口发送缓冲区
-typedef struct {
-    float Target;        // 目标值
-    float Kp, Ki, Kd;    // PID 三参数
-    float Error;         // 当前偏差 (Target - Current)
-    float Last_Error;    // 上次偏差
-    float Integral;      // 偏差累加
-    float Output;        // 最终输出 (0-1000)
-} PID_TypeDef;
-PID_TypeDef MyPID;
+extern PID_TypeDef MyPID;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
+void MX_FREERTOS_Init(void);
 /* USER CODE BEGIN PFP */
-
+void key_scan(void);
+void key_process(void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-void PID_Init(PID_TypeDef *pid) {
-    pid->Target = 40.0f; // 设定 40 度
-    pid->Kp = 120.0f;    // 先给一个较大的 P
-    pid->Ki = 0.8f;      // 小一点的 I 消除残余误差
-    pid->Kd = 30.0f;     // 适中的 D 抑制震荡
-    pid->Integral = 0;
-    pid->Last_Error = 0;
-}
-void Control_Loop(void)//PID计算
-{
-    if (adc_values[0] > 0)
-        vdd_v = 1.21f * 4095.0f / (float)adc_values[0];
 
-    float vsense = ((float)adc_values[1] / 4095.0f) * vdd_v;
-    core_temp = ((vsense - 0.76f) / 0.0025f) + 25.0f;
-
-    MyPID.Error = MyPID.Target - core_temp;
-    MyPID.Integral += MyPID.Error;
-
-    if (MyPID.Integral > 150) MyPID.Integral = 150;
-    if (MyPID.Integral < -150) MyPID.Integral = -150;
-
-    float D = MyPID.Error - MyPID.Last_Error;
-
-    MyPID.Output =
-        MyPID.Kp * MyPID.Error +
-        MyPID.Ki * MyPID.Integral +
-        MyPID.Kd * D;
-
-    MyPID.Last_Error = MyPID.Error;
-
-    if (MyPID.Output > 1000) MyPID.Output = 1000;
-    if (MyPID.Output < 0) MyPID.Output = 0;
-
-    __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1,(uint32_t)MyPID.Output);
-}
 void Debug_Print(void)// 调试信息打印
 {
     if(print_counter >= PRINT_INTERVAL)
@@ -185,29 +148,26 @@ int main(void)
 HAL_UART_Receive_IT(&huart2,(uint8_t *)&rx,1);
   /* USER CODE END 2 */
 
+  /* Init scheduler */
+  osKernelInitialize();  /* Call init function for freertos objects (in cmsis_os2.c) */
+  MX_FREERTOS_Init();
+
+  /* Start scheduler */
+  osKernelStart();
+
+  /* We should never get here as control is now taken by the scheduler */
+
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-    if (tim4_tick)
-    {
-      tim4_tick = 0;
-       HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc_values, 2);
-        Control_Loop();
-                // 2. 串口打印 (每 200ms 运行一次，降低串口负担)
-        static uint16_t ui_cnt = 0;
-        if (ui_cnt++ >= 20) { 
-            Debug_Print();    
-            ui_cnt = 0;    
-  }
-
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+  }
   /* USER CODE END 3 */
 }
-}
-}
+
 /**
   * @brief System Clock Configuration
   * @retval None
@@ -268,7 +228,15 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
         print_counter++;
        key_scan();
        key_process();
+       Debug_Print();
+       HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc_values, 2); // 重新启动 ADC DMA 以获取最新数据
+       Control_Loop();
     }
+      /* 1. 处理 FreeRTOS 系统心跳 (来自 TIM5) */
+  if (htim->Instance == TIM5)
+  {
+    HAL_IncTick();
+  }
 }
 // 如果你想在发送完成后做点什么，可以取消下面函数的注�?
 
@@ -287,6 +255,16 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 }
 
 /* USER CODE END 4 */
+
+/**
+  * @brief  Period elapsed callback in non blocking mode
+  * @note   This function is called  when TIM5 interrupt took place, inside
+  * HAL_TIM_IRQHandler(). It makes a direct call to HAL_IncTick() to increment
+  * a global variable "uwTick" used as application time base.
+  * @param  htim : TIM handle
+  * @retval None
+  */
+
 
 /**
   * @brief  This function is executed in case of error occurrence.
