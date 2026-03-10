@@ -11,6 +11,7 @@
 #include "cmsis_os.h"
 #include "adc.h"
 #include "dma.h"
+#include "spi.h"
 #include "tim.h"
 #include "usart.h"
 #include "gpio.h"
@@ -140,6 +141,7 @@ int main(void)
   MX_TIM4_Init();
   MX_ADC1_Init();
   MX_TIM2_Init();
+  MX_SPI1_Init();
   /* USER CODE BEGIN 2 */
   PID_Init(&MyPID);
   Params_Load(); // 加载参数到 MyPID
@@ -319,8 +321,6 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
   * @param  htim : TIM handle
   * @retval None
   */
-
-
 /**
   * @brief  This function is executed in case of error occurrence.
   * @retval None
