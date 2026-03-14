@@ -25,6 +25,8 @@
 #include "control.h"
 #include "params_store.h"
 #include "stdlib.h"
+#include "lv_port_lcd_stm32.h"
+#include "lvgl.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -72,6 +74,7 @@ void key_process(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+
 void Debug_Print(void)// 调试信息打印
 {
     if(print_counter >= PRINT_INTERVAL)
@@ -223,25 +226,21 @@ void SystemClock_Config(void)
 }
 
 /* USER CODE BEGIN 4 */
-int fputc(int ch, FILE *f)
+int io_putchar(int ch)
 {
-  // 使用阻塞模式发送一个字节，超时设为 HAL_MAX_DELAY 确保发送完成
-  HAL_UART_Transmit(&huart2, (uint8_t *)&ch, 1, HAL_MAX_DELAY);
-  return ch;
+    uint8_t c = (uint8_t)ch;
+    HAL_UART_Transmit(&huart2, &c, 1, HAL_MAX_DELAY);
+    return ch;
 }
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
     if (htim->Instance == TIM4)
     {
         tim4_tick = 1;
-        print_counter++;
-       key_scan();
-       key_process();
-       Debug_Print();
-       HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc_values, 2); // 重新启动 ADC DMA 以获取最新数据
-       Control_Loop();
+       /* 使用 TIM4 作为 LVGL 计时器（TIM4 每 10ms 中断一次） */
+       lv_tick_inc(10); // 让 LVGL 的定时器运行起来，确保界面刷新
     }
-      /* 1. 处理 FreeRTOS 系统心跳 (来自 TIM5) */
+      /* 1. timebase) */
   if (htim->Instance == TIM5)
   {
     HAL_IncTick();
@@ -321,6 +320,8 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
   * @param  htim : TIM handle
   * @retval None
   */
+
+
 /**
   * @brief  This function is executed in case of error occurrence.
   * @retval None

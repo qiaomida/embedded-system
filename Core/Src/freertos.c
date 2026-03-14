@@ -28,6 +28,9 @@
 #include "control.h"
 #include "params_store.h"
 #include "pid.h"
+#include "lv_port_lcd_stm32.h"
+#include "lvgl.h"
+#include "stdio.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -37,7 +40,6 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -59,6 +61,20 @@ const osThreadAttr_t defaultTask_attributes = {
   .stack_size = 128 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
+/* Definitions for LVGL_Task */
+osThreadId_t LVGL_TaskHandle;
+const osThreadAttr_t LVGL_Task_attributes = {
+  .name = "LVGL_Task",
+  .stack_size = 1024 * 4,
+  .priority = (osPriority_t) osPriorityNormal,
+};
+/* Definitions for myTask03 */
+osThreadId_t myTask03Handle;
+const osThreadAttr_t myTask03_attributes = {
+  .name = "myTask03",
+  .stack_size = 128 * 4,
+  .priority = (osPriority_t) osPriorityLow,
+};
 
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN FunctionPrototypes */
@@ -66,6 +82,8 @@ const osThreadAttr_t defaultTask_attributes = {
 /* USER CODE END FunctionPrototypes */
 
 void StartDefaultTask(void *argument);
+void StartLVGLTask(void *argument);
+void StartTask03(void *argument);
 
 void MX_FREERTOS_Init(void); /* (MISRA C 2004 rule 8.1) */
 
@@ -99,6 +117,12 @@ void MX_FREERTOS_Init(void) {
   /* creation of defaultTask */
   defaultTaskHandle = osThreadNew(StartDefaultTask, NULL, &defaultTask_attributes);
 
+  /* creation of LVGL_Task */
+  LVGL_TaskHandle = osThreadNew(StartLVGLTask, NULL, &LVGL_Task_attributes);
+
+  /* creation of myTask03 */
+  myTask03Handle = osThreadNew(StartTask03, NULL, &myTask03_attributes);
+
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
   /* USER CODE END RTOS_THREADS */
@@ -125,6 +149,56 @@ void StartDefaultTask(void *argument)
     osDelay(1);
   }
   /* USER CODE END StartDefaultTask */
+}
+
+/* USER CODE BEGIN Header_StartLVGLTask */
+/**
+* @brief Function implementing the LVGL_Task thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_StartLVGLTask */
+void StartLVGLTask(void *argument)
+{
+  /* USER CODE BEGIN StartLVGLTask */
+  printf("lvgl task\\r\\n");
+  lv_init();
+  lv_port_disp_init();
+ // 3. 画个按钮，看看颜色对不对
+    lv_obj_t * btn = lv_button_create(lv_screen_active());
+    lv_obj_set_size(btn, 150, 50);
+    lv_obj_center(btn);
+    lv_obj_set_style_bg_color(btn, lv_palette_main(LV_PALETTE_RED), 0); // 设为红色按钮
+
+    lv_obj_t * label = lv_label_create(btn);
+    lv_label_set_text(label, "SUCCESS!");
+    lv_obj_center(label);
+    
+  /* Infinite loop */
+  for(;;)
+  {
+    lv_timer_handler();
+    osDelay(5);
+  }
+  /* USER CODE END StartLVGLTask */
+}
+
+/* USER CODE BEGIN Header_StartTask03 */
+/**
+* @brief Function implementing the myTask03 thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_StartTask03 */
+void StartTask03(void *argument)
+{
+  /* USER CODE BEGIN StartTask03 */
+  /* Infinite loop */
+  for(;;)
+  {
+    osDelay(1);
+  }
+  /* USER CODE END StartTask03 */
 }
 
 /* Private application code --------------------------------------------------*/

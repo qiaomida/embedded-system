@@ -30,10 +30,28 @@
 #include <sys/time.h>
 #include <sys/times.h>
 
+#include "usart.h"
 
 /* Variables */
 extern int __io_putchar(int ch) __attribute__((weak));
 extern int __io_getchar(void) __attribute__((weak));
+
+/* UART handle for printf output */
+extern UART_HandleTypeDef huart2;
+
+/**
+ * @brief  Low-level putchar used by newlib/picolibc.
+ * @param  ch Character to output.
+ * @retval int The character written.
+ */
+__attribute__((weak)) int __io_putchar(int ch)
+{
+  if (huart2.gState == HAL_UART_STATE_READY) {
+    uint8_t c = (uint8_t)ch;
+    HAL_UART_Transmit(&huart2, &c, 1, HAL_MAX_DELAY);
+  }
+  return ch;
+}
 
 
 char *__env[1] = { 0 };
@@ -80,8 +98,15 @@ __attribute__((weak)) int _read(int file, char *ptr, int len)
 __attribute__((weak)) int _write(int file, char *ptr, int len)
 {
   (void)file;
-  int DataIdx;
 
+  /* If UART is ready, send directly via HAL_UART to get printf output. */
+  if (huart2.gState == HAL_UART_STATE_READY) {
+    HAL_UART_Transmit(&huart2, (uint8_t *)ptr, len, HAL_MAX_DELAY);
+    return len;
+  }
+
+  /* Fallback: use weak __io_putchar if UART not ready */
+  int DataIdx;
   for (DataIdx = 0; DataIdx < len; DataIdx++)
   {
     __io_putchar(*ptr++);
