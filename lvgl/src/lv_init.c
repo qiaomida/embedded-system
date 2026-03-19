@@ -42,7 +42,7 @@
 #include "debugging/sysmon/lv_sysmon_private.h"
 #include "others/translation/lv_translation.h"
 #include "drivers/wayland/lv_wayland_private.h"
-
+#include "stdio.h"
 #if LV_USE_SVG
     #include "libs/svg/lv_svg_decoder.h"
 #endif
@@ -96,7 +96,8 @@
  *********************/
 #define lv_initialized  LV_GLOBAL_DEFAULT()->inited
 #define lv_deinit_in_progress  LV_GLOBAL_DEFAULT()->deinit_in_progress
-
+#define LV_CONF_INCLUDE_SIMPLE
+#include "lv_conf.h"
 /**********************
  *      TYPEDEFS
  **********************/
@@ -178,6 +179,7 @@ bool lv_is_initialized(void)
 
 void lv_init(void)
 {
+    printf("lv_init start\r\n");
     /*First initialize Garbage Collection if needed*/
 #ifdef LV_GC_INIT
     LV_GC_INIT();
@@ -193,11 +195,12 @@ void lv_init(void)
 
     /*Initialize members of static variable lv_global */
     LV_GLOBAL_INIT(LV_GLOBAL_DEFAULT());
-
+    printf("1\r\n");
     lv_mem_init();
+     printf("2\r\n");
 
     lv_draw_buf_init_handlers();
-
+     printf("draw\r\n");
 #if LV_USE_SPAN != 0
     lv_span_stack_init();
 #endif

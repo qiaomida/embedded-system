@@ -14,14 +14,14 @@
 /* clang-format off */
 #if 1
  /* Set this to "1" to enable content */
-#define LV_CONF_INCLUDE_SIMPLE
+
 #ifndef LV_CONF_H
 #define LV_CONF_H
+
 /* If you need to include anything here, do it inside the `__ASSEMBLY__` guard */
 #if  0 && defined(__ASSEMBLY__)
 #include "my_include.h"
-#endif
-/* --------------------------
+#endif/* --------------------------
  * Standard library includes
  * -------------------------- */
 
@@ -72,13 +72,13 @@
 
 #if LV_USE_STDLIB_MALLOC == LV_STDLIB_BUILTIN
     /** Size of memory available for `lv_malloc()` in bytes (>= 2kB) */
-    #define LV_MEM_SIZE (48ul * 1024U)          /**< [bytes] */
+    #define LV_MEM_SIZE (32u * 1024U)          /**< [bytes] */
 
     /** Size of the memory expand for `lv_malloc()` in bytes */
     #define LV_MEM_POOL_EXPAND_SIZE 0
 
     /** Set an address for the memory pool instead of allocating it as a normal array. Can be in external SRAM too. */
-    #define LV_MEM_ADR 0x10000000     /**< 0: unused*/
+    #define LV_MEM_ADR 0     /**< 0: unused*/
     /* Instead of an address give a memory allocator that will be called to get a memory pool for LVGL. E.g. my_malloc */
     #if LV_MEM_ADR == 0
         #undef LV_MEM_POOL_INCLUDE
@@ -146,7 +146,7 @@
  * and can't be drawn in chunks. */
 
 /** The target buffer size for simple layer chunks. */
-#define LV_DRAW_LAYER_SIMPLE_BUF_SIZE    (24 * 1024)    /**< [bytes]*/
+#define LV_DRAW_LAYER_SIMPLE_BUF_SIZE    (8 * 1024)    /**< [bytes]*/
 
 /* Limit the max allocated memory for simple and transformed layers.
  * It should be at least `LV_DRAW_LAYER_SIMPLE_BUF_SIZE` sized but if transformed layers are also used
@@ -1469,7 +1469,7 @@
     #define LV_USE_DEMO_KEYPAD_AND_ENCODER 1
 
     /** Benchmark your system */
-    #define LV_USE_DEMO_BENCHMARK 1
+    #define LV_USE_DEMO_BENCHMARK 0
 
     #if LV_USE_DEMO_BENCHMARK
         /** Use fonts where bitmaps are aligned 16 byte and has Nx16 byte stride */

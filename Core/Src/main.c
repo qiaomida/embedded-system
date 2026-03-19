@@ -61,15 +61,32 @@ uint8_t cmd_index = 0;
 // DMA 相关变量
 char dma_msg[64];           // 串口发送缓冲区
 extern PID_TypeDef MyPID;
-
+// 总线忙标志（必须加 volatile，否则编译器优化会死机）
+volatile uint8_t lcd_bus_busy = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
+void lvgl_mem_debug(void)
+{
+    lv_mem_monitor_t mon;   // ⭐ 定义结构体（核心）
+
+    lv_mem_monitor(&mon);   // ⭐ 获取内存状态
+
+    printf("used: %lu, free: %lu, frag: %d%%\r\n",
+           mon.used_cnt,   // 已用内存
+           mon.free_size,   // 剩余内存
+           mon.frag_pct);   // 内存碎片率
+    }
 void SystemClock_Config(void);
 void MX_FREERTOS_Init(void);
 /* USER CODE BEGIN PFP */
 void key_scan(void);
 void key_process(void);
+// LVGL 延时回调适配函数：无返回值，匹配 lv_delay_cb_t 类型
+ void lvgl_delay_adapt(uint32_t ms)
+{
+    osDelay(ms);  // 内部调用 FreeRTOS 的延时函数
+}
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -116,13 +133,11 @@ void key_process(void)//长按处理
   */
 int main(void)
 {
-
   /* USER CODE BEGIN 1 */
 
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
-
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
   HAL_Init();
 
@@ -143,43 +158,44 @@ int main(void)
   MX_USART2_UART_Init();
   MX_TIM4_Init();
   MX_ADC1_Init();
-  MX_TIM2_Init();
   MX_SPI1_Init();
   /* USER CODE BEGIN 2 */
   PID_Init(&MyPID);
   Params_Load(); // 加载参数到 MyPID
- if (HAL_TIM_Base_Start_IT(&htim4) != HAL_OK) {
-   Error_Handler();
- }
- if (HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc_values, 2) != HAL_OK) {
-   Error_Handler();
- }
- HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_1);
+  if (HAL_TIM_Base_Start_IT(&htim4) != HAL_OK) {
+    Error_Handler();
+  }
+  if (HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc_values, 2) != HAL_OK) {
+    Error_Handler();
+  }
   printf("boot ok\r\n");
-
-HAL_UART_Receive_IT(&huart2,(uint8_t *)&rx,1);
+  printf("LV_MEM_SIZE = %d\r\n", LV_MEM_SIZE);
+  lv_init();
+  printf("lv_init done\r\n");
+  lvgl_mem_debug();
+  HAL_UART_Receive_IT(&huart2,(uint8_t *)&rx,1);
+  lv_port_disp_init();
   /* USER CODE END 2 */
 
   /* Init scheduler */
-  osKernelInitialize();  /* Call init function for freertos objects (in cmsis_os2.c) */
+  osKernelInitialize();
   MX_FREERTOS_Init();
-
+  printf("rtos ok\r\n");
+  // ==================== 【正确位置：必须加在这里！】====================
+  // 1. 注册 LVGL 时钟
+  lv_tick_set_cb(HAL_GetTick); 
+  // 2. 注册 LVGL 延时回调（你之前漏了这一句！）
+  lv_delay_set_cb(lvgl_delay_adapt);
+  // ====================================================================
   /* Start scheduler */
   osKernelStart();
 
-  /* We should never get here as control is now taken by the scheduler */
-
-  /* Infinite loop */
-  /* USER CODE BEGIN WHILE */
+  /* We should never get here */
   while (1)
   {
-    /* USER CODE END WHILE */
 
-    /* USER CODE BEGIN 3 */
   }
-  /* USER CODE END 3 */
 }
-
 /**
   * @brief System Clock Configuration
   * @retval None
@@ -226,10 +242,28 @@ void SystemClock_Config(void)
 }
 
 /* USER CODE BEGIN 4 */
-int io_putchar(int ch)
+int fputc(int ch, FILE *f) {
+    /* 请确认这里的 UART 实例是你实际连接到 PC 的串口。
+       例如 Nucleo/Discovery 板通常使用 USART2 (PA2/PA3)，
+       如果你使用的是 USART1/USART3 等，请把 &huart2 替换为对应的句柄。 */
+    HAL_UART_Transmit(&huart2, (uint8_t *)&ch, 1, HAL_MAX_DELAY);
+    return ch;
+
+
+
+}
+
+/* 如果使用 newlib (GCC) 或其他 libc 版本，printf 可能会调用 _write。 */
+int _write(int file, char *ptr, int len)
 {
-    uint8_t c = (uint8_t)ch;
-    HAL_UART_Transmit(&huart2, &c, 1, HAL_MAX_DELAY);
+    HAL_UART_Transmit(&huart2, (uint8_t *)ptr, len, HAL_MAX_DELAY);
+    return len;
+}
+
+/* 有些工具链会调用 __io_putchar 来重定向 printf */
+int __io_putchar(int ch)
+{
+    HAL_UART_Transmit(&huart2, (uint8_t *)&ch, 1, HAL_MAX_DELAY);
     return ch;
 }
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
@@ -237,8 +271,6 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
     if (htim->Instance == TIM4)
     {
         tim4_tick = 1;
-       /* 使用 TIM4 作为 LVGL 计时器（TIM4 每 10ms 中断一次） */
-       lv_tick_inc(10); // 让 LVGL 的定时器运行起来，确保界面刷新
     }
       /* 1. timebase) */
   if (htim->Instance == TIM5)
@@ -309,7 +341,6 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 }
     }
 
-
 /* USER CODE END 4 */
 
 /**
@@ -320,7 +351,6 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
   * @param  htim : TIM handle
   * @retval None
   */
-
 
 /**
   * @brief  This function is executed in case of error occurrence.

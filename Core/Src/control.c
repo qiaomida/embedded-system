@@ -25,5 +25,5 @@ void Control_Loop(void)//PID计算
     if (MyPID.Output > 1000) MyPID.Output = 1000;
     if (MyPID.Output < 0) MyPID.Output = 0;
 
-    __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1,(uint32_t)MyPID.Output);
+    //_HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1,(uint32_t)MyPID.Output);
 }

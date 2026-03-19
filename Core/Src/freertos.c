@@ -65,7 +65,7 @@ const osThreadAttr_t defaultTask_attributes = {
 osThreadId_t LVGL_TaskHandle;
 const osThreadAttr_t LVGL_Task_attributes = {
   .name = "LVGL_Task",
-  .stack_size = 1024 * 4,
+  .stack_size = 2048 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
 /* Definitions for myTask03 */
@@ -75,16 +75,19 @@ const osThreadAttr_t myTask03_attributes = {
   .stack_size = 128 * 4,
   .priority = (osPriority_t) osPriorityLow,
 };
-
+static void lvgl_delay_adapt(uint32_t ms)
+{
+    osDelay(ms);  // 内部调用 FreeRTOS 的延时函数
+}
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN FunctionPrototypes */
+
 
 /* USER CODE END FunctionPrototypes */
 
 void StartDefaultTask(void *argument);
 void StartLVGLTask(void *argument);
 void StartTask03(void *argument);
-
 void MX_FREERTOS_Init(void); /* (MISRA C 2004 rule 8.1) */
 
 /**
@@ -161,24 +164,13 @@ void StartDefaultTask(void *argument)
 void StartLVGLTask(void *argument)
 {
   /* USER CODE BEGIN StartLVGLTask */
-  printf("lvgl task\\r\\n");
-  lv_init();
-  lv_port_disp_init();
- // 3. 画个按钮，看看颜色对不对
-    lv_obj_t * btn = lv_button_create(lv_screen_active());
-    lv_obj_set_size(btn, 150, 50);
-    lv_obj_center(btn);
-    lv_obj_set_style_bg_color(btn, lv_palette_main(LV_PALETTE_RED), 0); // 设为红色按钮
-
-    lv_obj_t * label = lv_label_create(btn);
-    lv_label_set_text(label, "SUCCESS!");
-    lv_obj_center(label);
-    
+    lv_delay_set_cb(lvgl_delay_adapt);
+    printf("RTOS task running\r\n");
   /* Infinite loop */
   for(;;)
   {
     lv_timer_handler();
-    osDelay(5);
+    osDelay(1);
   }
   /* USER CODE END StartLVGLTask */
 }
