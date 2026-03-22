@@ -66,32 +66,21 @@ volatile uint8_t lcd_bus_busy = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
-void lvgl_mem_debug(void)
-{
-    lv_mem_monitor_t mon;   // ⭐ 定义结构体（核心）
-
-    lv_mem_monitor(&mon);   // ⭐ 获取内存状态
-
-    printf("used: %lu, free: %lu, frag: %d%%\r\n",
-           mon.used_cnt,   // 已用内存
-           mon.free_size,   // 剩余内存
-           mon.frag_pct);   // 内存碎片率
-    }
 void SystemClock_Config(void);
 void MX_FREERTOS_Init(void);
 /* USER CODE BEGIN PFP */
 void key_scan(void);
 void key_process(void);
+
+/* USER CODE END PFP */
+
+/* Private user code ---------------------------------------------------------*/
+/* USER CODE BEGIN 0 */
 // LVGL 延时回调适配函数：无返回值，匹配 lv_delay_cb_t 类型
  void lvgl_delay_adapt(uint32_t ms)
 {
     osDelay(ms);  // 内部调用 FreeRTOS 的延时函数
 }
-/* USER CODE END PFP */
-
-/* Private user code ---------------------------------------------------------*/
-/* USER CODE BEGIN 0 */
-
 void Debug_Print(void)// 调试信息打印
 {
     if(print_counter >= PRINT_INTERVAL)
@@ -133,11 +122,13 @@ void key_process(void)//长按处理
   */
 int main(void)
 {
+
   /* USER CODE BEGIN 1 */
 
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
+
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
   HAL_Init();
 
@@ -156,6 +147,10 @@ int main(void)
   MX_GPIO_Init();
   MX_DMA_Init();
   MX_USART2_UART_Init();
+  
+  // 强制串口测试
+  HAL_UART_Transmit(&huart2, (uint8_t *)"Serial Port Ready\r\n", 19, 100);
+  printf("starting periph init\r\n");
   MX_TIM4_Init();
   MX_ADC1_Init();
   MX_SPI1_Init();
@@ -170,32 +165,33 @@ int main(void)
   }
   printf("boot ok\r\n");
   printf("LV_MEM_SIZE = %d\r\n", LV_MEM_SIZE);
+  osKernelInitialize();  /* LVGL uses FreeRTOS mutexes when LV_USE_OS == LV_OS_FREERTOS */
   lv_init();
-  printf("lv_init done\r\n");
-  lvgl_mem_debug();
+  lv_delay_set_cb(lvgl_delay_adapt);
+   lv_tick_set_cb(HAL_GetTick);
+  printf("LVGL initialized\r\n");
   HAL_UART_Receive_IT(&huart2,(uint8_t *)&rx,1);
-  lv_port_disp_init();
   /* USER CODE END 2 */
 
   /* Init scheduler */
-  osKernelInitialize();
   MX_FREERTOS_Init();
-  printf("rtos ok\r\n");
-  // ==================== 【正确位置：必须加在这里！】====================
-  // 1. 注册 LVGL 时钟
-  lv_tick_set_cb(HAL_GetTick); 
-  // 2. 注册 LVGL 延时回调（你之前漏了这一句！）
-  lv_delay_set_cb(lvgl_delay_adapt);
-  // ====================================================================
+
   /* Start scheduler */
   osKernelStart();
 
-  /* We should never get here */
+  /* We should never get here as control is now taken by the scheduler */
+
+  /* Infinite loop */
+  /* USER CODE BEGIN WHILE */
   while (1)
   {
+    /* USER CODE END WHILE */
 
+    /* USER CODE BEGIN 3 */
   }
+  /* USER CODE END 3 */
 }
+
 /**
   * @brief System Clock Configuration
   * @retval None
@@ -253,19 +249,6 @@ int fputc(int ch, FILE *f) {
 
 }
 
-/* 如果使用 newlib (GCC) 或其他 libc 版本，printf 可能会调用 _write。 */
-int _write(int file, char *ptr, int len)
-{
-    HAL_UART_Transmit(&huart2, (uint8_t *)ptr, len, HAL_MAX_DELAY);
-    return len;
-}
-
-/* 有些工具链会调用 __io_putchar 来重定向 printf */
-int __io_putchar(int ch)
-{
-    HAL_UART_Transmit(&huart2, (uint8_t *)&ch, 1, HAL_MAX_DELAY);
-    return ch;
-}
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
     if (htim->Instance == TIM4)
@@ -280,66 +263,66 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 }
 // 如果你想在发送完成后做点什么，可以取消下面函数的注�?
 
-void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
-{
-    if(huart->Instance == USART2)
-    {
-        if(rx=='+')
-        {MyPID.Target++;}
-        else if (rx=='-')
-        { MyPID.Target--; }
-        else if (rx=='S')
-        {
-            Params_Save(); // 接收到 'S' 时保存参数到 Flash
-            printf(">> Quick Saved!\r\n");
-        }
-        else if (rx == 'X')
-        {printf(">> Target: %.1f, Kp: %.2f, Ki: %.2f, Kd: %.2f\r\n", MyPID.Target, MyPID.Kp, MyPID.Ki, MyPID.Kd);}
-        // B. 处理复杂指令 (如 P10.5, T50, 需要回车触发)
-        else if (rx == '\n' || rx == '\r') 
-        {
-            if (cmd_index > 0) 
-            {
-                cmd_buffer[cmd_index] = '\0'; // 闭合字符串
+// void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
+// {
+//     if(huart->Instance == USART2)
+//     {
+//         if(rx=='+')
+//         {MyPID.Target++;}
+//         else if (rx=='-')
+//         { MyPID.Target--; }
+//         else if (rx=='S')
+//         {
+//             Params_Save(); // 接收到 'S' 时保存参数到 Flash
+//             printf(">> Quick Saved!\r\n");
+//         }
+//         else if (rx == 'X')
+//         {printf(">> Target: %.1f, Kp: %.2f, Ki: %.2f, Kd: %.2f\r\n", MyPID.Target, MyPID.Kp, MyPID.Ki, MyPID.Kd);}
+//         // B. 处理复杂指令 (如 P10.5, T50, 需要回车触发)
+//         else if (rx == '\n' || rx == '\r') 
+//         {
+//             if (cmd_index > 0) 
+//             {
+//                 cmd_buffer[cmd_index] = '\0'; // 闭合字符串
                 
-                if (cmd_buffer[0] == 'P') {
-                    MyPID.Kp = atof(&cmd_buffer[1]);
-                    printf(">> Kp: %.2f\r\n", MyPID.Kp);
-                }
-                else if (cmd_buffer[0] == 'I') {
-                    MyPID.Ki = atof(&cmd_buffer[1]);
-                    printf(">> Ki: %.2f\r\n", MyPID.Ki);
-                }
-                else if (cmd_buffer[0] == 'T') {
-                    MyPID.Target = atof(&cmd_buffer[1]);
-                    printf(">> Target: %.1f\r\n", MyPID.Target);
-                }
-                else if (strcmp(cmd_buffer, "SAVE") == 0) {
-                    Params_Save();
-                    printf(">> Full Params Saved!\r\n");
-                }
-               else if (cmd_buffer[0] == 'D') {
-                    MyPID.Kd = atof(&cmd_buffer[1]);
-                    printf(">> Kd: %.2f\r\n", MyPID.Kd);
-                } 
-                cmd_index = 0; // 重置缓冲区
-            }
-        }
-        // C. 如果不是以上字符，也不是回车，就存入缓冲区待命
-        else 
-        {
-            if (cmd_index < 31) {
-                cmd_buffer[cmd_index++] = (char)rx;
-            }
-        }
+//                 if (cmd_buffer[0] == 'P') {
+//                     MyPID.Kp = atof(&cmd_buffer[1]);
+//                     printf(">> Kp: %.2f\r\n", MyPID.Kp);
+//                 }
+//                 else if (cmd_buffer[0] == 'I') {
+//                     MyPID.Ki = atof(&cmd_buffer[1]);
+//                     printf(">> Ki: %.2f\r\n", MyPID.Ki);
+//                 }
+//                 else if (cmd_buffer[0] == 'T') {
+//                     MyPID.Target = atof(&cmd_buffer[1]);
+//                     printf(">> Target: %.1f\r\n", MyPID.Target);
+//                 }
+//                 else if (strcmp(cmd_buffer, "SAVE") == 0) {
+//                     Params_Save();
+//                     printf(">> Full Params Saved!\r\n");
+//                 }
+//                else if (cmd_buffer[0] == 'D') {
+//                     MyPID.Kd = atof(&cmd_buffer[1]);
+//                     printf(">> Kd: %.2f\r\n", MyPID.Kd);
+//                 } 
+//                 cmd_index = 0; // 重置缓冲区
+//             }
+//         }
+//         // C. 如果不是以上字符，也不是回车，就存入缓冲区待命
+//         else 
+//         {
+//             if (cmd_index < 31) {
+//                 cmd_buffer[cmd_index++] = (char)rx;
+//             }
+//         }
 
 
         
-        // DMA 接收完成后的回调，可以在这里翻转一?LED 状?
-        HAL_UART_Receive_IT(&huart2,(uint8_t *)&rx,1); // 继续接收下一个字节
+//         // DMA 接收完成后的回调，可以在这里翻转一?LED 状?
+//         HAL_UART_Receive_IT(&huart2,(uint8_t *)&rx,1); // 继续接收下一个字节
     
-}
-    }
+// }
+//     }
 
 /* USER CODE END 4 */
 
@@ -351,6 +334,7 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
   * @param  htim : TIM handle
   * @retval None
   */
+
 
 /**
   * @brief  This function is executed in case of error occurrence.

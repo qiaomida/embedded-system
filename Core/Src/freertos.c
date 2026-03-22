@@ -58,27 +58,24 @@ extern float core_temp;
 osThreadId_t defaultTaskHandle;
 const osThreadAttr_t defaultTask_attributes = {
   .name = "defaultTask",
-  .stack_size = 128 * 4,
+  .stack_size = 2048,
   .priority = (osPriority_t) osPriorityNormal,
 };
 /* Definitions for LVGL_Task */
 osThreadId_t LVGL_TaskHandle;
 const osThreadAttr_t LVGL_Task_attributes = {
   .name = "LVGL_Task",
-  .stack_size = 2048 * 4,
+  .stack_size = 1024 * 6,
   .priority = (osPriority_t) osPriorityNormal,
 };
 /* Definitions for myTask03 */
 osThreadId_t myTask03Handle;
 const osThreadAttr_t myTask03_attributes = {
   .name = "myTask03",
-  .stack_size = 128 * 4,
+  .stack_size = 2048,
   .priority = (osPriority_t) osPriorityLow,
 };
-static void lvgl_delay_adapt(uint32_t ms)
-{
-    osDelay(ms);  // 内部调用 FreeRTOS 的延时函数
-}
+
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN FunctionPrototypes */
 
@@ -88,6 +85,7 @@ static void lvgl_delay_adapt(uint32_t ms)
 void StartDefaultTask(void *argument);
 void StartLVGLTask(void *argument);
 void StartTask03(void *argument);
+
 void MX_FREERTOS_Init(void); /* (MISRA C 2004 rule 8.1) */
 
 /**
@@ -164,13 +162,27 @@ void StartDefaultTask(void *argument)
 void StartLVGLTask(void *argument)
 {
   /* USER CODE BEGIN StartLVGLTask */
-    lv_delay_set_cb(lvgl_delay_adapt);
-    printf("RTOS task running\r\n");
+    
+    printf("LVGL Task Starting...\r\n");
+   lv_port_disp_init();
+    printf("LVGL Porting Done!\r\n");
+    /* 2. 创建一个红色按钮验证颜色 */
+    lv_obj_t * btn = lv_button_create(lv_screen_active());
+    lv_obj_set_size(btn, 120, 50);
+    lv_obj_center(btn);
+    
+    /* 重点：设置背景色为纯红 (RGB: 0xFF0000) */
+    lv_obj_set_style_bg_color(btn, lv_color_hex(0xFF0000), 0);
+    lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, 0);
+
+    lv_obj_t * label = lv_label_create(btn);
+    lv_label_set_text(label, "RED?");
+    lv_obj_center(label);
   /* Infinite loop */
   for(;;)
   {
     lv_timer_handler();
-    osDelay(1);
+    osDelay(5);
   }
   /* USER CODE END StartLVGLTask */
 }

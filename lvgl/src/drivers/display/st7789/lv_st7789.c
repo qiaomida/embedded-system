@@ -85,6 +85,10 @@ lv_display_t * lv_st7789_create(uint32_t hor_res, uint32_t ver_res, lv_lcd_flag_
                                 lv_st7789_send_cmd_cb_t send_cmd_cb, lv_st7789_send_color_cb_t send_color_cb)
 {
     lv_display_t * disp = lv_lcd_generic_mipi_create(hor_res, ver_res, flags, send_cmd_cb, send_color_cb);
+    if(disp == NULL) {
+        return NULL;
+    }
+
     lv_lcd_generic_mipi_send_cmd_list(disp, init_cmd_list);
     return disp;
 }

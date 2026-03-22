@@ -195,12 +195,8 @@ void lv_init(void)
 
     /*Initialize members of static variable lv_global */
     LV_GLOBAL_INIT(LV_GLOBAL_DEFAULT());
-    printf("1\r\n");
     lv_mem_init();
-     printf("2\r\n");
-
     lv_draw_buf_init_handlers();
-     printf("draw\r\n");
 #if LV_USE_SPAN != 0
     lv_span_stack_init();
 #endif

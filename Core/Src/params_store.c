@@ -30,8 +30,8 @@ void Params_Load(void) {
         MyPID.Kp = 2.0f;
         MyPID.Ki = 0.5f;
         MyPID.Kd = 0.1f;
-        // 自动写入一个默认值
-        Params_Save();
+        // 自动写入一个默认值 (暂时注释掉，防止 Boot 卡死)
+        // Params_Save(); 
     }
 }
 
