@@ -31,6 +31,7 @@
 #include "lv_port_lcd_stm32.h"
 #include "lvgl.h"
 #include "stdio.h"
+#include "lv_port_indev.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -80,49 +81,41 @@ const osThreadAttr_t myTask03_attributes = {
 
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN FunctionPrototypes */
-/**
- * @brief 更新 UI 上的计数器数值
- */
-void update_encoder_ui(int32_t value) {
-    if(label_value) {
-        lv_label_set_text_fmt(label_value, "Count: %d", (int)value);
-    }
-}
+void setup_double_buttons(void)
+{
+  // 1. 获取默认组
+  lv_group_t * g = lv_group_get_default();
+  if(g == NULL) {
+      g = lv_group_create();
+      lv_group_set_default(g);
+  }
 
-/**
- * @brief 编码器 UI 初始化
- */
-void setup_encoder_ui(void) {
-    lv_obj_t * scr = lv_screen_active();
-    lv_obj_set_style_bg_color(scr, lv_color_hex(0x000000), 0); // 黑色背景
-
-    /* 创建标题 */
-    lv_obj_t * title = lv_label_create(scr);
-    lv_label_set_text(title, "ENCODER TEST");
-    lv_obj_set_style_text_color(title, lv_color_hex(0xFFFFFF), 0);
-    lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 20);
-
-    /* 创建数值显示标签 */
-    label_value = lv_label_create(scr);
-    lv_label_set_text(label_value, "Count: 0");
-    lv_obj_set_style_text_font(label_value, &lv_font_montserrat_14, 0); // 假设启用了此字体
-    lv_obj_set_style_text_color(label_value, lv_color_hex(0x00FF00), 0); // 绿色数值
-    lv_obj_center(label_value);
-}
-
-/**
- * @brief 在 StartLVGLTask 的循环中调用
- */
-void process_encoder(void) {
-    /* 读取 TIM4 计数器 (假设为编码器模式) */
-    int16_t current_val = (int16_t)__HAL_TIM_GET_COUNTER(&htim4);
+  // 2. 创建第一个按钮
+    lv_obj_t * btn1 = lv_button_create(lv_screen_active());
+    lv_obj_set_size(btn1, 120, 50);
+    lv_obj_align(btn1, LV_ALIGN_CENTER, 0, -40);
     
-    /* 简单的增量逻辑，也可以根据需要清零计数器 */
-    if(current_val != 0) {
-        encoder_count += current_val;
-        __HAL_TIM_SET_COUNTER(&htim4, 0); // 复位
-        update_encoder_ui(encoder_count);
-    }
+    lv_obj_t * label1 = lv_label_create(btn1);
+    lv_label_set_text(label1, "Button 1");
+    lv_obj_center(label1);
+
+    // 3. 创建第二个按钮
+    lv_obj_t * btn2 = lv_button_create(lv_screen_active());
+    lv_obj_set_size(btn2, 120, 50);
+    lv_obj_align(btn2, LV_ALIGN_CENTER, 0, 40);
+
+    lv_obj_t * label2 = lv_label_create(btn2);
+    lv_label_set_text(label2, "Button 2");
+    lv_obj_center(label2);
+
+    // 4. 将按钮加入组，并设置样式以显示选中状态
+    lv_group_add_obj(g, btn1);
+    lv_group_add_obj(g, btn2);
+    
+    // 默认选中第一个
+    lv_group_focus_obj(btn1);
+
+    printf("UI Setup: Objects added to group\r\n");
 }
 
 /* USER CODE END FunctionPrototypes */
@@ -210,14 +203,13 @@ void StartLVGLTask(void *argument)
     
   printf("LVGL Task Starting...\r\n");
   lv_port_disp_init();
-//   printf("LVGL Porting Done!\r\n");
-  HAL_TIM_Encoder_Start(&htim4, TIM_CHANNEL_ALL); // 启动编码器接口
-  setup_encoder_ui(); // 初始化编码器 UI
-  /* Infinite loop */
-  for(;;)
+  lv_port_indev_init();
+   printf("LVGL Porting Done!\r\n");
+  setup_double_buttons();
+  /* Infinite loop */  
+  for(;;)                                                                                                                              
   {
     lv_timer_handler();
-    process_encoder(); // 处理编码器输入
     osDelay(5);
   }
   /* USER CODE END StartLVGLTask */
