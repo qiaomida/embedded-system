@@ -53,32 +53,77 @@
 extern ADC_HandleTypeDef hadc1;
 extern PID_TypeDef MyPID;
 extern float core_temp;
+static lv_obj_t * label_value;
+static int32_t encoder_count = 0;
 /* USER CODE END Variables */
 /* Definitions for defaultTask */
 osThreadId_t defaultTaskHandle;
 const osThreadAttr_t defaultTask_attributes = {
   .name = "defaultTask",
-  .stack_size = 2048,
+  .stack_size = 1024 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
 /* Definitions for LVGL_Task */
 osThreadId_t LVGL_TaskHandle;
 const osThreadAttr_t LVGL_Task_attributes = {
   .name = "LVGL_Task",
-  .stack_size = 1024 * 6,
+  .stack_size = 2048 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
 /* Definitions for myTask03 */
 osThreadId_t myTask03Handle;
 const osThreadAttr_t myTask03_attributes = {
   .name = "myTask03",
-  .stack_size = 2048,
+  .stack_size = 1024 * 4,
   .priority = (osPriority_t) osPriorityLow,
 };
 
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN FunctionPrototypes */
+/**
+ * @brief 更新 UI 上的计数器数值
+ */
+void update_encoder_ui(int32_t value) {
+    if(label_value) {
+        lv_label_set_text_fmt(label_value, "Count: %d", (int)value);
+    }
+}
 
+/**
+ * @brief 编码器 UI 初始化
+ */
+void setup_encoder_ui(void) {
+    lv_obj_t * scr = lv_screen_active();
+    lv_obj_set_style_bg_color(scr, lv_color_hex(0x000000), 0); // 黑色背景
+
+    /* 创建标题 */
+    lv_obj_t * title = lv_label_create(scr);
+    lv_label_set_text(title, "ENCODER TEST");
+    lv_obj_set_style_text_color(title, lv_color_hex(0xFFFFFF), 0);
+    lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 20);
+
+    /* 创建数值显示标签 */
+    label_value = lv_label_create(scr);
+    lv_label_set_text(label_value, "Count: 0");
+    lv_obj_set_style_text_font(label_value, &lv_font_montserrat_14, 0); // 假设启用了此字体
+    lv_obj_set_style_text_color(label_value, lv_color_hex(0x00FF00), 0); // 绿色数值
+    lv_obj_center(label_value);
+}
+
+/**
+ * @brief 在 StartLVGLTask 的循环中调用
+ */
+void process_encoder(void) {
+    /* 读取 TIM4 计数器 (假设为编码器模式) */
+    int16_t current_val = (int16_t)__HAL_TIM_GET_COUNTER(&htim4);
+    
+    /* 简单的增量逻辑，也可以根据需要清零计数器 */
+    if(current_val != 0) {
+        encoder_count += current_val;
+        __HAL_TIM_SET_COUNTER(&htim4, 0); // 复位
+        update_encoder_ui(encoder_count);
+    }
+}
 
 /* USER CODE END FunctionPrototypes */
 
@@ -163,25 +208,16 @@ void StartLVGLTask(void *argument)
 {
   /* USER CODE BEGIN StartLVGLTask */
     
-    printf("LVGL Task Starting...\r\n");
-   lv_port_disp_init();
-    printf("LVGL Porting Done!\r\n");
-    /* 2. 创建一个红色按钮验证颜色 */
-    lv_obj_t * btn = lv_button_create(lv_screen_active());
-    lv_obj_set_size(btn, 120, 50);
-    lv_obj_center(btn);
-    
-    /* 重点：设置背景色为纯红 (RGB: 0xFF0000) */
-    lv_obj_set_style_bg_color(btn, lv_color_hex(0xFF0000), 0);
-    lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, 0);
-
-    lv_obj_t * label = lv_label_create(btn);
-    lv_label_set_text(label, "RED?");
-    lv_obj_center(label);
+  printf("LVGL Task Starting...\r\n");
+  lv_port_disp_init();
+//   printf("LVGL Porting Done!\r\n");
+  HAL_TIM_Encoder_Start(&htim4, TIM_CHANNEL_ALL); // 启动编码器接口
+  setup_encoder_ui(); // 初始化编码器 UI
   /* Infinite loop */
   for(;;)
   {
     lv_timer_handler();
+    process_encoder(); // 处理编码器输入
     osDelay(5);
   }
   /* USER CODE END StartLVGLTask */

@@ -20,7 +20,6 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "stm32f4xx_it.h"
-#include  "stdio.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 /* USER CODE END Includes */
@@ -91,22 +90,14 @@ void NMI_Handler(void)
   */
 void HardFault_Handler(void)
 {
-    __asm volatile
-    (
-        "TST lr, #4       \n"
-        "ITE EQ           \n"
-        "MRSEQ r0, MSP    \n"
-        "MRSNE r0, PSP    \n"
-        "B HardFault_C    \n"
-    );
-}
+  /* USER CODE BEGIN HardFault_IRQn 0 */
 
-void HardFault_C(uint32_t *stack)
-{
-    printf("PC = 0x%08lx\n", stack[6]); // 程序计数器
-    printf("LR = 0x%08lx\n", stack[5]);
-
-    while(1);
+  /* USER CODE END HardFault_IRQn 0 */
+  while (1)
+  {
+    /* USER CODE BEGIN W1_HardFault_IRQn 0 */
+    /* USER CODE END W1_HardFault_IRQn 0 */
+  }
 }
 
 /**

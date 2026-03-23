@@ -76,6 +76,7 @@ void key_process(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+
 // LVGL 延时回调适配函数：无返回值，匹配 lv_delay_cb_t 类型
  void lvgl_delay_adapt(uint32_t ms)
 {
@@ -92,6 +93,7 @@ void Debug_Print(void)// 调试信息打印
                MyPID.Target, core_temp, MyPID.Output/20.0f); // 输出目标温度、当前温度和 PWM 占空比（0-50）
     }
 }
+
 void key_process(void)//长按处理
 {
     if(key_up.state)
@@ -147,33 +149,30 @@ int main(void)
   MX_GPIO_Init();
   MX_DMA_Init();
   MX_USART2_UART_Init();
-  
-  // 强制串口测试
-  HAL_UART_Transmit(&huart2, (uint8_t *)"Serial Port Ready\r\n", 19, 100);
-  printf("starting periph init\r\n");
   MX_TIM4_Init();
   MX_ADC1_Init();
   MX_SPI1_Init();
   /* USER CODE BEGIN 2 */
   PID_Init(&MyPID);
+  printf("Params Load\r\n");
   Params_Load(); // 加载参数到 MyPID
-  if (HAL_TIM_Base_Start_IT(&htim4) != HAL_OK) {
-    Error_Handler();
-  }
+  printf("TIM/ADC Start\r\n");
+  /* TIM4 is used for Encoder Interface */
   if (HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc_values, 2) != HAL_OK) {
     Error_Handler();
   }
   printf("boot ok\r\n");
-  printf("LV_MEM_SIZE = %d\r\n", LV_MEM_SIZE);
+  //printf("LV_MEM_SIZE = %d\r\n", LV_MEM_SIZE);
   osKernelInitialize();  /* LVGL uses FreeRTOS mutexes when LV_USE_OS == LV_OS_FREERTOS */
   lv_init();
   lv_delay_set_cb(lvgl_delay_adapt);
-   lv_tick_set_cb(HAL_GetTick);
+  lv_tick_set_cb(HAL_GetTick);
   printf("LVGL initialized\r\n");
   HAL_UART_Receive_IT(&huart2,(uint8_t *)&rx,1);
   /* USER CODE END 2 */
 
   /* Init scheduler */
+  osKernelInitialize();  /* Call init function for freertos objects (in cmsis_os2.c) */
   MX_FREERTOS_Init();
 
   /* Start scheduler */
@@ -334,7 +333,6 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
   * @param  htim : TIM handle
   * @retval None
   */
-
 
 /**
   * @brief  This function is executed in case of error occurrence.
