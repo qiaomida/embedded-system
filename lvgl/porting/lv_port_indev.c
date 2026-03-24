@@ -66,25 +66,58 @@ static void encoder_read(lv_indev_t * indev_drv, lv_indev_data_t * data)
 {
     static int16_t last_counter = 0;
     int16_t current_counter = (int16_t)__HAL_TIM_GET_COUNTER(&htim4);
-    
+    static int16_t enc_acc = 0;//减速处理
     // 1. 处理旋转
-    data->enc_diff = current_counter - last_counter;
+    int16_t diff = current_counter - last_counter;
     last_counter = current_counter;
+    
+    if(diff != 0) {
+        printf("Raw Diff: %d, Counter: %d\r\n", (int)diff, (int)current_counter);
+    }
+    
+    enc_acc += diff;
 
-    // 2. 处理按键 (C相/SW)
-    // 假设按键接在 GPIOA PIN 0, 低电平有效
-    // 如果没有物理按键，这里可以始终设为 RELEASED
+    // 每累积 2 个脉冲就动一次（2脉冲/格）
+    if(enc_acc >= 2) {
+        data->enc_diff = 1;
+        enc_acc = 0;
+    }
+    else if(enc_acc <= -2) {
+        data->enc_diff = -1;
+        enc_acc = 0;
+    }
+    else {
+        data->enc_diff = 0;
+    }
+    // 2. 处理按键 (换成 PC13)                                                                                                                                                                                     
+    // PC13 通常是板载蓝色按钮或外部接线，低电平有效
     static uint8_t debounce_cnt = 0;
-    if (HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0) == GPIO_PIN_RESET) {
+    GPIO_PinState pin_state = HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_13);
+    
+    if (pin_state == GPIO_PIN_RESET) {
         if (debounce_cnt < 3) debounce_cnt++;
     } else {
         debounce_cnt = 0;
     }
 
+    static lv_indev_state_t last_state = LV_INDEV_STATE_RELEASED;
     if (debounce_cnt >= 2) {
         data->state = LV_INDEV_STATE_PRESSED;
+        data->key = LV_KEY_ENTER; 
+        static uint32_t last_print = 0;
+        if(HAL_GetTick() - last_print > 500) { 
+            printf("Button SW: PRESSED (PC13 Low)\r\n");
+            last_print = HAL_GetTick();
+        }
     } else {
         data->state = LV_INDEV_STATE_RELEASED;
+    }
+    
+    if(data->state != last_state) {
+        if(data->state == LV_INDEV_STATE_RELEASED) {
+            printf("Button SW: RELEASED (PC13 High)\r\n");
+        }
+        last_state = data->state;
     }
     
     /* 调试输出：如果转动了编码器，打印一下差异 */

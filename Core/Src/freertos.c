@@ -81,43 +81,118 @@ const osThreadAttr_t myTask03_attributes = {
 
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN FunctionPrototypes */
-void setup_double_buttons(void)
-{
-  // 1. 获取默认组
-  lv_group_t * g = lv_group_get_default();
-  if(g == NULL) {
-      g = lv_group_create();
-      lv_group_set_default(g);
-  }
+// 定义页面函数指针类型
+typedef void (*menu_page_func_t)(lv_obj_t * parent);
+// 页面函数声明
+void create_main_menu(lv_obj_t * parent);
+void create_settings_menu(lv_obj_t * parent);
+void create_info_page(lv_obj_t * parent);
+// 核心跳转函数
+void switch_page(menu_page_func_t page_func);
+// 当前页面和容器
+static lv_obj_t * current_screen = NULL;
+// 事件回调函数声明 (纯C必须独立定义)
+static void event_to_settings_cb(lv_event_t * e);
+static void event_to_info_cb(lv_event_t * e);
+static void event_to_main_cb(lv_event_t * e);
 
-  // 2. 创建第一个按钮
-    lv_obj_t * btn1 = lv_button_create(lv_screen_active());
-    lv_obj_set_size(btn1, 120, 50);
-    lv_obj_align(btn1, LV_ALIGN_CENTER, 0, -40);
+
+/**
+ * 页面切换核心函数
+ * @param page_func 下一个页面的构造函数
+ */
+void switch_page(menu_page_func_t page_func) {
+    // 1. 清理当前屏幕内容
+    if (current_screen != NULL) {
+        lv_obj_clean(lv_scr_act()); // 清除当前活动屏幕的所有子对象
+    }
     
-    lv_obj_t * label1 = lv_label_create(btn1);
-    lv_label_set_text(label1, "Button 1");
-    lv_obj_center(label1);
-
-    // 3. 创建第二个按钮
-    lv_obj_t * btn2 = lv_button_create(lv_screen_active());
-    lv_obj_set_size(btn2, 120, 50);
-    lv_obj_align(btn2, LV_ALIGN_CENTER, 0, 40);
-
-    lv_obj_t * label2 = lv_label_create(btn2);
-    lv_label_set_text(label2, "Button 2");
-    lv_obj_center(label2);
-
-    // 4. 将按钮加入组，并设置样式以显示选中状态
-    lv_group_add_obj(g, btn1);
-    lv_group_add_obj(g, btn2);
+    // 2. 重新设置当前容器（直接用活动屏幕）
+    current_screen = lv_scr_act();
     
-    // 默认选中第一个
-    lv_group_focus_obj(btn1);
-
-    printf("UI Setup: Objects added to group\r\n");
+    // 3. 执行页面构造
+    if (page_func) {
+        page_func(current_screen);
+    }
 }
 
+// --- 页面 1: 主菜单 ---
+void create_main_menu(lv_obj_t * parent) {
+    lv_obj_t * list = lv_list_create(parent);
+    lv_obj_set_size(list, lv_pct(100), lv_pct(100));
+    lv_obj_center(list);
+
+    lv_list_add_text(list, "Main Menu");
+    
+    // 设置按钮
+    lv_obj_t * btn_set = lv_list_add_btn(list, LV_SYMBOL_SETTINGS, "Settings");
+    lv_obj_add_event_cb(btn_set, event_to_settings_cb, LV_EVENT_CLICKED, NULL);
+
+
+    // 信息按钮
+    lv_obj_t * btn_info = lv_list_add_btn(list, LV_SYMBOL_FILE, "System Info");
+    lv_obj_add_event_cb(btn_info, event_to_info_cb, LV_EVENT_CLICKED, NULL);
+    //加入group
+        lv_group_t * g = lv_group_get_default();
+    if(g) {
+        lv_group_add_obj(g, btn_set);
+        lv_group_add_obj(g, btn_info);
+    }
+}
+
+// --- 页面 2: 设置菜单 ---
+void create_settings_menu(lv_obj_t * parent) {
+    lv_obj_t * label = lv_label_create(parent);
+    lv_label_set_text(label, "Settings Page");
+    lv_obj_align(label, LV_ALIGN_TOP_MID, 0, 20);
+
+    // 亮度调节滑块
+    lv_obj_t * slider = lv_slider_create(parent);
+    lv_obj_set_width(slider, lv_pct(80));
+    lv_obj_center(slider);
+
+    // 返回按钮
+    lv_obj_t * btn_back = lv_btn_create(parent);
+    lv_obj_align(btn_back, LV_ALIGN_BOTTOM_MID, 0, -20);
+    lv_obj_t * label_back = lv_label_create(btn_back);
+    lv_label_set_text(label_back, "Back");
+        lv_obj_add_event_cb(btn_back, event_to_main_cb, LV_EVENT_CLICKED, NULL);
+
+    lv_group_t * g = lv_group_get_default();
+    if(g) {
+        lv_group_add_obj(g, slider);
+        lv_group_add_obj(g, btn_back);
+    }
+
+}
+
+// --- 页面 3: 信息页面 ---
+void create_info_page(lv_obj_t * parent) {
+    lv_obj_t * label = lv_label_create(parent);
+    lv_label_set_text(label, "Version: v1.0\nCPU: STM32F4\nOS: FreeRTOS");
+    lv_obj_center(label);
+
+    // 同样添加返回逻辑...
+    lv_obj_t * btn_back = lv_btn_create(parent);
+    lv_obj_align(btn_back, LV_ALIGN_BOTTOM_MID, 0, -20);
+    lv_obj_t * label_back = lv_label_create(btn_back);
+    lv_label_set_text(label_back, "Back");                                                     
+    lv_obj_add_event_cb(btn_back, event_to_main_cb, LV_EVENT_CLICKED, NULL);
+
+}
+
+/* --- 事件回调函数集 --- */
+static void event_to_settings_cb(lv_event_t * e) {
+    switch_page(create_settings_menu);
+}
+
+static void event_to_info_cb(lv_event_t * e) {
+    switch_page(create_info_page);
+}
+
+static void event_to_main_cb(lv_event_t * e) {
+    switch_page(create_main_menu);
+}  
 /* USER CODE END FunctionPrototypes */
 
 void StartDefaultTask(void *argument);
@@ -205,7 +280,7 @@ void StartLVGLTask(void *argument)
   lv_port_disp_init();
   lv_port_indev_init();
    printf("LVGL Porting Done!\r\n");
-  setup_double_buttons();
+  switch_page(create_main_menu); // 显示主菜单
   /* Infinite loop */  
   for(;;)                                                                                                                              
   {
