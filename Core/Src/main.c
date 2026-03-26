@@ -155,15 +155,16 @@ int main(void)
   /* USER CODE BEGIN 2 */
   PID_Init(&MyPID);
   printf("Params Load\r\n");
-  Params_Load(); // 加载参数到 MyPID
+  //Params_Load(); // 加载参数到 MyPID
   printf("TIM/ADC Start\r\n");
   /* TIM4 is used for Encoder Interface */
-  if (HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc_values, 2) != HAL_OK) {
+  HAL_StatusTypeDef adc_status = HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc_values, 2);
+  if (adc_status != HAL_OK) {
+    printf("ADC DMA Start Failed: %d\r\n", adc_status);
     Error_Handler();
-  }
-  printf("boot ok\r\n");
+  } 
+  printf("ADC DMA Started\r\n");
   //printf("LV_MEM_SIZE = %d\r\n", LV_MEM_SIZE);
-  osKernelInitialize();  /* LVGL uses FreeRTOS mutexes when LV_USE_OS == LV_OS_FREERTOS */
   lv_init();
   lv_delay_set_cb(lvgl_delay_adapt);
   lv_tick_set_cb(HAL_GetTick);

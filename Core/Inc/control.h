@@ -5,6 +5,7 @@
 #include "main.h"
 #include "adc.h"
 #include "tim.h"
+#include"stdio.h"
 extern uint16_t adc_values[2]; // [0]:Vref, [1]:Temp
 extern float vdd_v; 
 extern float core_temp;

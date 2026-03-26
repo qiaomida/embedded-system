@@ -13,7 +13,6 @@
  *********************/
 static void encoder_init(void);
 static void encoder_read(lv_indev_t * indev, lv_indev_data_t * data);
-
 /**********************
  *  STATIC VARIABLES
  **********************/
@@ -37,13 +36,12 @@ void lv_port_indev_init(void)
     lv_indev_set_type(indev_encoder, LV_INDEV_TYPE_ENCODER);
     lv_indev_set_read_cb(indev_encoder, encoder_read);
 
-    /*Assign encoder to default group*/
-    lv_group_t * g = lv_group_get_default();
-    if(g == NULL) {
-        g = lv_group_create();
-        lv_group_set_default(g);
-    }
+    /* 必须：创建一个全局默认组并绑定到编码器 */
+    lv_group_t * g = lv_group_create();
+    lv_group_set_default(g);
     lv_indev_set_group(indev_encoder, g);
+    
+    printf("Indev: Encoder initialized and bound to default group\r\n");
 }
 
 /**********************
@@ -64,6 +62,7 @@ static void encoder_init(void)
 /*Will be called by the library to read the encoder*/
 static void encoder_read(lv_indev_t * indev_drv, lv_indev_data_t * data)
 {
+
     static int16_t last_counter = 0;
     int16_t current_counter = (int16_t)__HAL_TIM_GET_COUNTER(&htim4);
     static int16_t enc_acc = 0;//减速处理

@@ -75,11 +75,11 @@ void lv_port_disp_init(void)
     
     lv_display_set_rotation(lcd_disp, LV_DISPLAY_ROTATION_270);     /* set landscape orientation */
 
-    /* Example: two dynamically allocated buffers for partial rendering */
-   static uint8_t buf1[MY_DISP_HOR_RES * MY_DISP_VER_RES/10];
-   static uint8_t buf2[MY_DISP_HOR_RES * MY_DISP_VER_RES/10];
+    /* Example: one statically allocated buffer for partial rendering */
+   static uint16_t buf1[MY_DISP_HOR_RES * MY_DISP_VER_RES / 10];
+   // static uint16_t buf2[MY_DISP_HOR_RES * MY_DISP_VER_RES / 10]; // 禁用第二个缓冲区以节省内存
 
-   lv_display_set_buffers(lcd_disp, buf1, buf2, sizeof(buf1), LV_DISPLAY_RENDER_MODE_PARTIAL);
+   lv_display_set_buffers(lcd_disp, buf1, NULL, sizeof(buf1), LV_DISPLAY_RENDER_MODE_PARTIAL);
 
 } 
 
