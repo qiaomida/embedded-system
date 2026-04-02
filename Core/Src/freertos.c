@@ -568,8 +568,9 @@ void StartTask03(void *argument)
   /* Infinite loop */
   for(;;)
   {
-    Control_Loop(); // 执行 PID 计算和数据更新
-    osDelay(10);    // 10ms 周期
+    Control_Loop();      // 执行 PID 计算和数据更新
+    lv_port_indev_scan(); // 扫描按键事件 (10ms)
+    osDelay(10);         // 10ms 周期
   }
   /* USER CODE END StartTask03 */
 }

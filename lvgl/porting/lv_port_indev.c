@@ -6,6 +6,7 @@
 
 #include "lv_port_indev.h"
 #include "tim.h"
+#include "key.h"
 #include <stdio.h>
 
 /*********************
@@ -13,14 +14,35 @@
  *********************/
 static void encoder_init(void);
 static void encoder_read(lv_indev_t * indev, lv_indev_data_t * data);
+
 /**********************
  *  STATIC VARIABLES
  **********************/
 lv_indev_t * indev_encoder;
+static Key_t encoder_key;
+static Key_Event_t last_key_event = KEY_EVENT_NONE;
 
 /**********************
  *   GLOBAL FUNCTIONS
  **********************/
+
+/**
+ * @brief 按键扫描函数，应以 10ms 周期调用
+ */
+void lv_port_indev_scan(void) {
+    Key_Event_t event = Key_Scan(&encoder_key);
+    if (event != KEY_EVENT_NONE) {
+        last_key_event = event;
+        
+        // 打印调试信息
+        switch(event) {
+            case KEY_EVENT_SINGLE_CLICK: printf("Key Event: SINGLE CLICK\r\n"); break;
+            case KEY_EVENT_DOUBLE_CLICK: printf("Key Event: DOUBLE CLICK\r\n"); break;
+            case KEY_EVENT_LONG_PRESS:   printf("Key Event: LONG PRESS\r\n"); break;
+            default: break;
+        }
+    }
+}
 
 void lv_port_indev_init(void)
 {
@@ -30,6 +52,9 @@ void lv_port_indev_init(void)
 
     /*Initialize your encoder if you have*/
     encoder_init();
+    
+    /* 初始化按键结构体 (PC13, 低电平有效) */
+    Key_Init(&encoder_key, GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);
 
     /*Register a encoder input device*/
     indev_encoder = lv_indev_create();
@@ -41,7 +66,7 @@ void lv_port_indev_init(void)
     lv_group_set_default(g);
     lv_indev_set_group(indev_encoder, g);
     
-    printf("Indev: Encoder initialized and bound to default group\r\n");
+    printf("Indev: Encoder & Key (PC13) initialized\r\n");
 }
 
 /**********************
@@ -88,35 +113,22 @@ static void encoder_read(lv_indev_t * indev_drv, lv_indev_data_t * data)
     else {
         data->enc_diff = 0;
     }
-    // 2. 处理按键 (换成 PC13)                                                                                                                                                                                     
-    // PC13 通常是板载蓝色按钮或外部接线，低电平有效
-    static uint8_t debounce_cnt = 0;
-    GPIO_PinState pin_state = HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_13);
     
-    if (pin_state == GPIO_PIN_RESET) {
-        if (debounce_cnt < 3) debounce_cnt++;
-    } else {
-        debounce_cnt = 0;
-    }
-
-    static lv_indev_state_t last_state = LV_INDEV_STATE_RELEASED;
-    if (debounce_cnt >= 2) {
+    // 2. 处理按键 (使用新 Key 模块)
+    // 根据状态机的内部状态判定当前物理按键是否被按下
+    if (encoder_key.State != KEY_STATE_IDLE && encoder_key.State != KEY_STATE_WAIT_DOUBLE && encoder_key.State != KEY_STATE_WAIT_LONG_RELEASE) {
         data->state = LV_INDEV_STATE_PRESSED;
-        data->key = LV_KEY_ENTER; 
-        static uint32_t last_print = 0;
-        if(HAL_GetTick() - last_print > 500) { 
-            printf("Button SW: PRESSED (PC13 Low)\r\n");
-            last_print = HAL_GetTick();
-        }
     } else {
         data->state = LV_INDEV_STATE_RELEASED;
     }
     
-    if(data->state != last_state) {
-        if(data->state == LV_INDEV_STATE_RELEASED) {
-            printf("Button SW: RELEASED (PC13 High)\r\n");
-        }
-        last_state = data->state;
+    // 如果发生了特定事件，可以进行额外处理
+    if (last_key_event != KEY_EVENT_NONE) {
+        // 这里可以将事件映射到 LVGL 的特定操作，或者直接让 LVGL 处理基本的 ENTER
+        data->key = LV_KEY_ENTER;
+        last_key_event = KEY_EVENT_NONE; // 消费掉事件
+    } else {
+        data->key = LV_KEY_ENTER;
     }
     
     /* 调试输出：如果转动了编码器，打印一下差异 */

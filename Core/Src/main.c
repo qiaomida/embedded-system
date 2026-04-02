@@ -94,28 +94,6 @@ void Debug_Print(void)// 调试信息打印
     }
 }
 
-void key_process(void)//长按处理
-{
-    if(key_up.state)
-    {
-        if(key_up.press_counter == 1)
-            MyPID.Target += 1;
-
-        if(key_up.press_counter > 50 && key_up.press_counter % 5 == 0)
-            MyPID.Target += 1;
-            Params_Save(); // 每次修改参数后保存到 Flash
-    }
-
-    if(key_down.state)
-    {
-        if(key_down.press_counter == 1)
-            MyPID.Target -= 1;
-
-        if(key_down.press_counter > 50 && key_down.press_counter % 5 == 0)
-            MyPID.Target -= 1;
-            Params_Save(); // 每次修改参数后保存到 Flash
-    }
-}
 /* USER CODE END 0 */
 
 /**
