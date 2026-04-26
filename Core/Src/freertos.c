@@ -59,6 +59,8 @@ extern float core_temp;
 extern float vdd_v; 
 static lv_obj_t * label_value;
 static int32_t encoder_count = 0;
+// 外部引用的 CubeMX 生成的 RTC 句柄
+extern RTC_HandleTypeDef hrtc;
 /* USER CODE END Variables */
 /* Definitions for defaultTask */
 osThreadId_t defaultTaskHandle;
@@ -98,6 +100,8 @@ static lv_obj_t * current_screen = NULL;
 
 
 /* --- UI 控件指针 --- */
+static lv_obj_t * date_label;
+static lv_obj_t * time_label;
 static lv_obj_t * label_temp;
 static lv_obj_t * label_vdd;
 static lv_obj_t * chart_temp;
@@ -110,6 +114,7 @@ static void event_to_settings_cb(lv_event_t * e);
 static void event_to_info_cb(lv_event_t * e);
 static void event_to_main_cb(lv_event_t * e);
 static void event_to_pid_cb(lv_event_t * e);
+static void event_to_clock_cb(lv_event_t * e);
 //更新函数声明
 static void update_temp_task(lv_timer_t * timer);
 
@@ -139,6 +144,8 @@ void switch_page(menu_page_func_t page_func) {
     roller_ki = NULL;
     roller_kd = NULL;
     led_heater = NULL;
+    time_label = NULL;
+    date_label = NULL;
 
     // 3. 执行页面构造
     if (page_func) {
@@ -155,6 +162,9 @@ void create_main_menu(lv_obj_t * parent) {
     lv_obj_center(list);
 
     lv_list_add_text(list, "Main Menu");
+    //时钟按钮
+    lv_obj_t * btn_clock = lv_list_add_btn(list, LV_SYMBOL_SETTINGS, "Clock");
+    lv_obj_add_event_cb(btn_clock, event_to_clock_cb, LV_EVENT_CLICKED, NULL);
     
     // 设置按钮
     lv_obj_t * btn_set = lv_list_add_btn(list, LV_SYMBOL_SETTINGS, "Settings");
@@ -174,6 +184,8 @@ void create_main_menu(lv_obj_t * parent) {
         lv_group_add_obj(g, btn_set);
         lv_group_add_obj(g, btn_info);
         lv_group_add_obj(g, btn_pid);
+        lv_group_add_obj(g, btn_clock);
+        lv_group_focus_obj(btn_clock);
     }
 }
 
@@ -252,6 +264,28 @@ void create_info_page(lv_obj_t * parent) {
         info_timer = lv_timer_create(update_temp_task, 200, NULL);
     }
 }
+/**
+ * 从硬件 RTC 获取时间并更新 LVGL 标签
+ */
+void update_clock_from_rtc(lv_obj_t *time_label, lv_obj_t *date_label) {
+    RTC_TimeTypeDef sTime = {0};
+    RTC_DateTypeDef sDate = {0};
+
+    // 1. 获取时间 (必须先读时间)
+    HAL_RTC_GetTime(&hrtc, &sTime, RTC_FORMAT_BIN);
+    // 2. 获取日期 (必须读日期，否则时间寄存器不刷新)
+    HAL_RTC_GetDate(&hrtc, &sDate, RTC_FORMAT_BIN);
+
+    // 3. 更新 UI
+    if (time_label) {
+        lv_label_set_text_fmt(time_label, "%02d:%02d:%02d", 
+                              sTime.Hours, sTime.Minutes, sTime.Seconds);
+    }
+    if (date_label) {
+        lv_label_set_text_fmt(date_label, "20%02d-%02d-%02d", 
+                              sDate.Year, sDate.Month, sDate.Date);
+    }
+}
 
 /* --- 页面逻辑 --- */
 
@@ -296,7 +330,11 @@ static void update_temp_task(lv_timer_t * timer) {
         }
     }
 }
-
+//更新时钟任务
+    void update_clock_task(lv_timer_t * timer) {
+    LV_UNUSED(timer);
+    update_clock_from_rtc(time_label, date_label);
+    }
 // 滚轮数值改变回调
 static void value_changed_event_cb(lv_event_t * e) {
     lv_obj_t * obj = lv_event_get_target(e);
@@ -318,6 +356,7 @@ static void value_changed_event_cb(lv_event_t * e) {
     }
 }
 
+//pid页面
 void create_pid_control_page(lv_obj_t * parent) {
     lv_group_t * g = lv_group_get_default();
 
@@ -438,10 +477,44 @@ void create_pid_control_page(lv_obj_t * parent) {
     printf("PID Page: Objects added to default group and focused\r\n");
 }
 
-
+void create_clock_page(lv_obj_t *parent)
+{
+    lv_group_t * g = lv_group_get_default();
+    // 时间显示
+    time_label = lv_label_create(parent);
+    lv_label_set_text(time_label, "--:--:--");
+    //时间显示
+    lv_obj_set_style_text_font(time_label, &lv_font_montserrat_48, 0);
+    lv_obj_set_style_text_color(time_label, lv_palette_main(LV_PALETTE_BLUE), 0);
+    lv_obj_align(time_label, LV_ALIGN_CENTER, 0, 0);
+    //日期显示
+    date_label = lv_label_create(parent);
+    lv_label_set_text_fmt(date_label, "Date: --/--/----");
+    lv_obj_align_to(date_label,time_label,LV_ALIGN_OUT_BOTTOM_MID,0,10);
+    //返回按钮
+    lv_obj_t * btn_back = lv_btn_create(parent);
+    lv_obj_set_size(btn_back, 60, 30);
+    lv_obj_align(btn_back, LV_ALIGN_BOTTOM_MID, 0, -5);
+    lv_obj_t * lbl_back = lv_label_create(btn_back);
+    lv_label_set_text(lbl_back, "Back");
+    lv_obj_add_event_cb(btn_back, event_to_main_cb, LV_EVENT_CLICKED, NULL);
+    //加入编码器
+    if(g) {
+        lv_group_add_obj(g, btn_back);
+    }
+    static lv_timer_t * clock_timer = NULL;
+    if(clock_timer == NULL) {
+        clock_timer = lv_timer_create(update_clock_task, 1000, NULL);
+    }
+    update_clock_from_rtc(time_label, date_label);
+}
 
 
 /* --- 事件回调函数集 --- */
+static void event_to_clock_cb(lv_event_t * e) {
+    switch_page(create_clock_page);
+}
+
 static void event_to_settings_cb(lv_event_t * e) {
     switch_page(create_settings_menu);
 }
@@ -456,6 +529,8 @@ static void event_to_main_cb(lv_event_t * e) {
 static void event_to_pid_cb(lv_event_t * e) {
     switch_page(create_pid_control_page);
 }
+
+
 /* USER CODE END FunctionPrototypes */
 
 void StartDefaultTask(void *argument);

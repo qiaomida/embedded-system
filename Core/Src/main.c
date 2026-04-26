@@ -11,6 +11,7 @@
 #include "cmsis_os.h"
 #include "adc.h"
 #include "dma.h"
+#include "rtc.h"
 #include "spi.h"
 #include "tim.h"
 #include "usart.h"
@@ -127,18 +128,25 @@ int main(void)
   MX_GPIO_Init();
   MX_DMA_Init();
   MX_USART2_UART_Init();
+  setvbuf(stdout, NULL, _IONBF, 0);
+  {
+    const char *boot_msg = "UART_DIRECT_OK\r\n";
+    HAL_UART_Transmit(&huart2, (uint8_t *)boot_msg, (uint16_t)strlen(boot_msg), 1000);
+  }
   MX_TIM4_Init();
   MX_ADC1_Init();
   MX_SPI1_Init();
+  MX_RTC_Init();
   /* USER CODE BEGIN 2 */
   PID_Init(&MyPID);
   printf("Params Load\r\n");
   //Params_Load(); // 加载参数到 MyPID
   printf("TIM/ADC Start\r\n");
-  /* TIM4 is used for Encoder Interface */
   HAL_StatusTypeDef adc_status = HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc_values, 2);
   if (adc_status != HAL_OK) {
-    printf("ADC DMA Start Failed: %d\r\n", adc_status);
+    uint32_t dma_err = (hadc1.DMA_Handle != NULL) ? hadc1.DMA_Handle->ErrorCode : 0xFFFFFFFFUL;
+    printf("ADC DMA Start Failed: st=%d hadc_err=0x%08lX dma_err=0x%08lX\r\n",
+           adc_status, (unsigned long)hadc1.ErrorCode, (unsigned long)dma_err);
     Error_Handler();
   } 
   printf("ADC DMA Started\r\n");
@@ -187,8 +195,10 @@ void SystemClock_Config(void)
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
   */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE|RCC_OSCILLATORTYPE_LSI;
   RCC_OscInitStruct.HSEState = RCC_HSE_BYPASS;
+  RCC_OscInitStruct.LSEState = RCC_LSE_OFF;
+  RCC_OscInitStruct.LSIState = RCC_LSI_ON;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
   RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
   RCC_OscInitStruct.PLL.PLLM = 4;
@@ -197,7 +207,23 @@ void SystemClock_Config(void)
   RCC_OscInitStruct.PLL.PLLQ = 4;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
-    Error_Handler();
+    /* Fallback for boards without external HSE clock source */
+    RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI|RCC_OSCILLATORTYPE_LSI;
+    RCC_OscInitStruct.HSEState = RCC_HSE_OFF;
+    RCC_OscInitStruct.HSIState = RCC_HSI_ON;
+    RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
+    RCC_OscInitStruct.LSEState = RCC_LSE_OFF;
+    RCC_OscInitStruct.LSIState = RCC_LSI_ON;
+    RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
+    RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI;
+    RCC_OscInitStruct.PLL.PLLM = 16;
+    RCC_OscInitStruct.PLL.PLLN = 100;
+    RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
+    RCC_OscInitStruct.PLL.PLLQ = 4;
+    if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
+    {
+      Error_Handler();
+    }
   }
 
   /** Initializes the CPU, AHB and APB buses clocks
@@ -222,9 +248,6 @@ int fputc(int ch, FILE *f) {
        如果你使用的是 USART1/USART3 等，请把 &huart2 替换为对应的句柄。 */
     HAL_UART_Transmit(&huart2, (uint8_t *)&ch, 1, HAL_MAX_DELAY);
     return ch;
-
-
-
 }
 
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)

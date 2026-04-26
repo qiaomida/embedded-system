@@ -1,0 +1,26 @@
+既然卡死在了 Params Load 之后，说明问题 100% 出在 Flash 操作 上。
+
+### 故障原因定位
+在 params_store.c 的 Params_Load 中，如果校验失败（通常是第一次运行），它会调用 Params_Save() 。而 Params_Save() 执行了以下危险操作：
+
+1. 扇区擦除 ( HAL_FLASHEx_Erase ) ：这会阻塞总线几百毫秒。
+2. 写字操作 ( HAL_FLASH_Program ) ：如果地址对齐或电源管理有问题，会直接触发硬件错误（HardFault）导致死机。
+由于程序刚刚启动，Flash 的状态可能不稳定。为了让系统先跑起来进入 LVGL，我们采取以下策略：
+
+1. 临时跳过写操作 ：在 Params_Load 中暂时注释掉 Params_Save() ，先让程序使用默认 PID 参数启动。
+2. 增加 Flash 内部调试信息 ：确定具体卡在擦除还是写入。
+### 行动方案：解除 Boot 阻塞
+
+params_store.c
+Core\Src\params_store.c
+
++ 2 - 2
+
+查看变更
+
+### 修改说明：解开启动死锁
+我们已经找到了第一个导致“什么都不打印”的拦路虎： Flash 自动初始化操作卡死了启动流程 。
+
+在 params_store.c 中，当系统检测到 Flash 校验位不正确（通常是刚烧录完第一次上电）时，它会立刻执行 Params_Save() 。而 Flash 的擦除操作需要极其严苛的电压（ FLASH_VOLTAGE_RANGE_3 ），如果配置不匹配或供电不稳定，系统会直接挂起。
+
+我已临时注释掉了 Params_Load 中的 Params_Save() 调用。
