@@ -1,0 +1,5 @@
+修复 RTC 引入后的启动稳定性问题：RTC 改为 LSI 时钟源，并在系统时钟中启用 LSI，避免上电初始化异常。
+修复 ADC 启动异常：清理不合理 injected 配置，常规序列改为 EOC_SEQ_CONV，保留双通道 DMA 连续采样路径。
+修复 UI 时钟页返回后编码器失效：页面切换时清空 time_label/date_label，防止定时器访问已销毁对象，并补充主菜单初始焦点。
+修复串口 printf 偶发无输出：syscalls 重定向改为直接阻塞发送，避免 UART busy 时静默丢日志。
+增加 ADC_IRQHandler 调用 HAL_ADC_IRQHandler(&hadc1)，补齐 ADC 全局中断处理链路

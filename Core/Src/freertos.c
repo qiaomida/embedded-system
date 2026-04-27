@@ -34,6 +34,8 @@
 #include "stdio.h"
 #include "lv_port_indev.h"
 #include "string.h"
+#include "timers.h"
+#include "buzzer.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -513,21 +515,26 @@ void create_clock_page(lv_obj_t *parent)
 /* --- 事件回调函数集 --- */
 static void event_to_clock_cb(lv_event_t * e) {
     switch_page(create_clock_page);
+    Buzzer_Beep(100);
 }
 
 static void event_to_settings_cb(lv_event_t * e) {
     switch_page(create_settings_menu);
+    Buzzer_Beep(100);
 }
 
 static void event_to_info_cb(lv_event_t * e) {
     switch_page(create_info_page);
+    Buzzer_Beep(100);
 }
 
 static void event_to_main_cb(lv_event_t * e) {
     switch_page(create_main_menu);
+    Buzzer_Beep(100); // 返回主菜单时短促蜂鸣提示
 }  
 static void event_to_pid_cb(lv_event_t * e) {
     switch_page(create_pid_control_page);
+    Buzzer_Beep(100);
 }
 
 
@@ -546,7 +553,7 @@ void MX_FREERTOS_Init(void); /* (MISRA C 2004 rule 8.1) */
   */
 void MX_FREERTOS_Init(void) {
   /* USER CODE BEGIN Init */
-
+  Buzzer_Init();
   /* USER CODE END Init */
 
   /* USER CODE BEGIN RTOS_MUTEX */
@@ -621,6 +628,7 @@ void StartLVGLTask(void *argument)
   printf("PID Output: %.2f\r\n", MyPID.Output);
 
   switch_page(create_main_menu); // 显示主菜单
+  Buzzer_Beep(200); // 启动时短促蜂鸣提示
   /* Infinite loop */  
   for(;;)                                                                                                                              
   {

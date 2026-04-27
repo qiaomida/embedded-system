@@ -65,7 +65,8 @@ void Error_Handler(void);
 #define LCD_DCX_GPIO_Port GPIOB
 #define LCD_RESET_Pin GPIO_PIN_15
 #define LCD_RESET_GPIO_Port GPIOB
-
+#define BUZZER_GPIO_Port GPIOD
+#define BUZZER_Pin       GPIO_PIN_2
 /* USER CODE BEGIN Private defines */
 
 /* USER CODE END Private defines */
