@@ -95,6 +95,7 @@ void create_main_menu(lv_obj_t * parent);
 void create_settings_menu(lv_obj_t * parent);
 void create_info_page(lv_obj_t * parent);
 void create_pid_control_page(lv_obj_t * parent);
+void create_pomodoro_page(lv_obj_t * parent);
 // 核心跳转函数
 void switch_page(menu_page_func_t page_func);
 // 当前页面和容器
@@ -110,6 +111,15 @@ static lv_obj_t * chart_temp;
 static lv_chart_series_t * ser_temp;
 static lv_obj_t * roller_kp, * roller_ki, * roller_kd, * roller_target;
 static lv_obj_t * led_heater; // 加热状态指示灯
+static lv_obj_t * pomodoro_arc;
+static lv_obj_t * pomodoro_time_label;
+static lv_obj_t * pomodoro_min_label;
+static lv_obj_t * pomodoro_slider;
+static lv_obj_t * pomodoro_btn_start;
+static uint32_t pomodoro_total_sec = 25U * 60U;
+static uint32_t pomodoro_remain_sec = 25U * 60U;
+static bool pomodoro_running = false;
+static lv_timer_t * pomodoro_timer = NULL;
 
 // 事件回调函数声明 (纯C必须独立定义)
 static void event_to_settings_cb(lv_event_t * e);
@@ -117,8 +127,13 @@ static void event_to_info_cb(lv_event_t * e);
 static void event_to_main_cb(lv_event_t * e);
 static void event_to_pid_cb(lv_event_t * e);
 static void event_to_clock_cb(lv_event_t * e);
+static void event_to_pomodoro_cb(lv_event_t * e);
 //更新函数声明
 static void update_temp_task(lv_timer_t * timer);
+static void pomodoro_tick_cb(lv_timer_t * timer);
+static void pomodoro_duration_changed_cb(lv_event_t * e);
+static void pomodoro_start_pause_cb(lv_event_t * e);
+static void pomodoro_reset_cb(lv_event_t * e);
 
 /**
  * 页面切换核心函数
@@ -148,6 +163,12 @@ void switch_page(menu_page_func_t page_func) {
     led_heater = NULL;
     time_label = NULL;
     date_label = NULL;
+    pomodoro_arc = NULL;
+    pomodoro_time_label = NULL;
+    pomodoro_min_label = NULL;
+    pomodoro_slider = NULL;
+    pomodoro_btn_start = NULL;
+    pomodoro_running = false;
 
     // 3. 执行页面构造
     if (page_func) {
@@ -167,6 +188,9 @@ void create_main_menu(lv_obj_t * parent) {
     //时钟按钮
     lv_obj_t * btn_clock = lv_list_add_btn(list, LV_SYMBOL_SETTINGS, "Clock");
     lv_obj_add_event_cb(btn_clock, event_to_clock_cb, LV_EVENT_CLICKED, NULL);
+    //番茄钟按钮
+    lv_obj_t * btn_pomodoro = lv_list_add_btn(list, LV_SYMBOL_REFRESH, "Pomodoro");
+    lv_obj_add_event_cb(btn_pomodoro, event_to_pomodoro_cb, LV_EVENT_CLICKED, NULL);
     
     // 设置按钮
     lv_obj_t * btn_set = lv_list_add_btn(list, LV_SYMBOL_SETTINGS, "Settings");
@@ -187,6 +211,7 @@ void create_main_menu(lv_obj_t * parent) {
         lv_group_add_obj(g, btn_info);
         lv_group_add_obj(g, btn_pid);
         lv_group_add_obj(g, btn_clock);
+        lv_group_add_obj(g, btn_pomodoro);
         lv_group_focus_obj(btn_clock);
     }
 }
@@ -337,6 +362,85 @@ static void update_temp_task(lv_timer_t * timer) {
     LV_UNUSED(timer);
     update_clock_from_rtc(time_label, date_label);
     }
+
+static void pomodoro_update_ui(void) {
+    uint32_t total = (pomodoro_total_sec == 0U) ? 1U : pomodoro_total_sec;
+    uint32_t percent = (pomodoro_remain_sec * 100U) / total;
+
+    if (pomodoro_arc) {
+        lv_arc_set_value(pomodoro_arc, (int32_t)percent);
+    }
+    if (pomodoro_time_label) {
+        uint32_t min = pomodoro_remain_sec / 60U;
+        uint32_t sec = pomodoro_remain_sec % 60U;
+        lv_label_set_text_fmt(pomodoro_time_label, "%02lu:%02lu", (unsigned long)min, (unsigned long)sec);
+    }
+    if (pomodoro_min_label && pomodoro_slider) {
+        lv_label_set_text_fmt(pomodoro_min_label, "Duration: %d min", (int)lv_slider_get_value(pomodoro_slider));
+    }
+    if (pomodoro_btn_start) {
+        lv_obj_t * btn_lbl = lv_obj_get_child(pomodoro_btn_start, 0);
+        if (btn_lbl) {
+            lv_label_set_text(btn_lbl, pomodoro_running ? "Pause" : "Start");
+        }
+    }
+}
+
+/**
+ * @brief 番茄工作法定时器回调函数
+ * 
+ * 作为LVGL定时器回调，每秒执行一次，用于更新番茄钟的剩余时间
+ * 当时间到0时，停止计时并触发蜂鸣器提醒
+ * 
+ * @param timer LVGL定时器对象指针
+ */
+static void pomodoro_tick_cb(lv_timer_t * timer) {
+    LV_UNUSED(timer);
+    
+    // 检查番茄钟是否正在运行，如果未运行则直接返回
+    if (!pomodoro_running) {
+        return;
+    }
+    
+    // 如果还有剩余时间，递减剩余秒数并更新UI
+    if (pomodoro_remain_sec > 0U) {
+        pomodoro_remain_sec--;  // 剩余时间减1秒
+        pomodoro_update_ui();   // 更新界面显示（进度条、时间标签等）
+    }
+    
+    // 当剩余时间为0时，停止计时并触发提醒
+    if (pomodoro_remain_sec == 0U) {
+        pomodoro_running = false;  // 停止番茄钟运行状态
+        pomodoro_update_ui();    // 更新界面显示（按钮文本等）
+        Buzzer_Beep(300);        // 触发蜂鸣器，频率300Hz，提醒用户时间到
+    }
+}
+static void pomodoro_duration_changed_cb(lv_event_t * e) {
+    LV_UNUSED(e);
+    if (!pomodoro_slider || pomodoro_running) {
+        return;
+    }
+    uint32_t minutes = (uint32_t)lv_slider_get_value(pomodoro_slider);
+    pomodoro_total_sec = minutes * 60U;
+    pomodoro_remain_sec = pomodoro_total_sec;
+    pomodoro_update_ui();
+}
+
+static void pomodoro_start_pause_cb(lv_event_t * e) {
+    LV_UNUSED(e);
+    pomodoro_running = !pomodoro_running;
+    pomodoro_update_ui();
+}
+
+static void pomodoro_reset_cb(lv_event_t * e) {
+    LV_UNUSED(e);
+    pomodoro_running = false;
+    if (pomodoro_slider) {
+        pomodoro_total_sec = (uint32_t)lv_slider_get_value(pomodoro_slider) * 60U;
+    }
+    pomodoro_remain_sec = pomodoro_total_sec;
+    pomodoro_update_ui();
+}
 // 滚轮数值改变回调
 static void value_changed_event_cb(lv_event_t * e) {
     lv_obj_t * obj = lv_event_get_target(e);
@@ -511,10 +615,80 @@ void create_clock_page(lv_obj_t *parent)
     update_clock_from_rtc(time_label, date_label);
 }
 
+void create_pomodoro_page(lv_obj_t * parent) {
+    lv_group_t * g = lv_group_get_default();
+
+    lv_obj_t * title = lv_label_create(parent);
+    lv_label_set_text(title, "Pomodoro Timer");
+    lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 8);
+
+    pomodoro_arc = lv_arc_create(parent);
+    lv_obj_set_size(pomodoro_arc, 150, 150);
+    lv_obj_align(pomodoro_arc, LV_ALIGN_CENTER, 0, -20);
+    lv_arc_set_range(pomodoro_arc, 0, 100);
+    lv_obj_remove_flag(pomodoro_arc, LV_OBJ_FLAG_CLICKABLE);
+
+    pomodoro_time_label = lv_label_create(parent);
+    lv_obj_set_style_text_font(pomodoro_time_label, &lv_font_montserrat_24, 0);
+    lv_obj_align_to(pomodoro_time_label, pomodoro_arc, LV_ALIGN_CENTER, 0, 0);
+
+    pomodoro_min_label = lv_label_create(parent);
+    lv_obj_align_to(pomodoro_min_label, pomodoro_arc, LV_ALIGN_OUT_BOTTOM_MID, 0, 10);
+
+    pomodoro_slider = lv_slider_create(parent);
+    lv_obj_set_width(pomodoro_slider, 180);
+    lv_obj_align(pomodoro_slider, LV_ALIGN_BOTTOM_MID, 0, -55);
+    lv_slider_set_range(pomodoro_slider, 1, 60);
+    lv_slider_set_value(pomodoro_slider, (int32_t)(pomodoro_total_sec / 60U), LV_ANIM_OFF);
+    lv_obj_add_event_cb(pomodoro_slider, pomodoro_duration_changed_cb, LV_EVENT_VALUE_CHANGED, NULL);
+
+    pomodoro_btn_start = lv_btn_create(parent);
+    lv_obj_set_size(pomodoro_btn_start, 70, 30);
+    lv_obj_align(pomodoro_btn_start, LV_ALIGN_BOTTOM_LEFT, 15, -12);
+    lv_obj_t * start_lbl = lv_label_create(pomodoro_btn_start);
+    lv_label_set_text(start_lbl, "Start");
+    lv_obj_center(start_lbl);
+    lv_obj_add_event_cb(pomodoro_btn_start, pomodoro_start_pause_cb, LV_EVENT_CLICKED, NULL);
+
+    lv_obj_t * btn_reset = lv_btn_create(parent);
+    lv_obj_set_size(btn_reset, 70, 30);
+    lv_obj_align(btn_reset, LV_ALIGN_BOTTOM_MID, 0, -12);
+    lv_obj_t * reset_lbl = lv_label_create(btn_reset);
+    lv_label_set_text(reset_lbl, "Reset");
+    lv_obj_center(reset_lbl);
+    lv_obj_add_event_cb(btn_reset, pomodoro_reset_cb, LV_EVENT_CLICKED, NULL);
+
+    lv_obj_t * btn_back = lv_btn_create(parent);
+    lv_obj_set_size(btn_back, 70, 30);
+    lv_obj_align(btn_back, LV_ALIGN_BOTTOM_RIGHT, -15, -12);
+    lv_obj_t * back_lbl = lv_label_create(btn_back);
+    lv_label_set_text(back_lbl, "Back");
+    lv_obj_center(back_lbl);
+    lv_obj_add_event_cb(btn_back, event_to_main_cb, LV_EVENT_CLICKED, NULL);
+
+    if (g) {
+        lv_group_add_obj(g, pomodoro_slider);
+        lv_group_add_obj(g, pomodoro_btn_start);
+        lv_group_add_obj(g, btn_reset);
+        lv_group_add_obj(g, btn_back);
+        lv_group_focus_obj(pomodoro_slider);
+    }
+
+    if (pomodoro_timer == NULL) {
+        pomodoro_timer = lv_timer_create(pomodoro_tick_cb, 1000, NULL);
+    }
+    pomodoro_update_ui();
+}
+
 
 /* --- 事件回调函数集 --- */
 static void event_to_clock_cb(lv_event_t * e) {
     switch_page(create_clock_page);
+    Buzzer_Beep(100);
+}
+
+static void event_to_pomodoro_cb(lv_event_t * e) {
+    switch_page(create_pomodoro_page);
     Buzzer_Beep(100);
 }
 

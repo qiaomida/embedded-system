@@ -156,7 +156,6 @@ int main(void)
   lv_tick_set_cb(HAL_GetTick);
   printf("LVGL initialized\r\n");
   HAL_UART_Receive_IT(&huart2,(uint8_t *)&rx,1);
-  HAL_GPIO_WritePin(BUZZER_GPIO_Port, BUZZER_Pin, GPIO_PIN_SET);
   /* USER CODE END 2 */
 
   /* Init scheduler */
