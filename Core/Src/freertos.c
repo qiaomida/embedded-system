@@ -120,6 +120,10 @@ static uint32_t pomodoro_total_sec = 25U * 60U;
 static uint32_t pomodoro_remain_sec = 25U * 60U;
 static bool pomodoro_running = false;
 static lv_timer_t * pomodoro_timer = NULL;
+static lv_obj_t *time_setting_popup = NULL;// 声明全局变量，用于保存弹窗和滑块对象
+static lv_obj_t *hour_slider = NULL;
+static lv_obj_t *min_slider = NULL;
+static lv_obj_t *sec_slider = NULL;
 
 // 事件回调函数声明 (纯C必须独立定义)
 static void event_to_settings_cb(lv_event_t * e);
@@ -128,12 +132,18 @@ static void event_to_main_cb(lv_event_t * e);
 static void event_to_pid_cb(lv_event_t * e);
 static void event_to_clock_cb(lv_event_t * e);
 static void event_to_pomodoro_cb(lv_event_t * e);
+static void event_set_time_ok(lv_event_t * e);
+static void event_set_time_cancel(lv_event_t * e);
+static void time_slider_changed_cb(lv_event_t * e);
+static void event_open_time_setting(lv_event_t *e);
+static void value_changed_event_cb(lv_event_t * e);
 //更新函数声明
 static void update_temp_task(lv_timer_t * timer);
 static void pomodoro_tick_cb(lv_timer_t * timer);
 static void pomodoro_duration_changed_cb(lv_event_t * e);
 static void pomodoro_start_pause_cb(lv_event_t * e);
 static void pomodoro_reset_cb(lv_event_t * e);
+static void update_clock_task(lv_timer_t * timer);
 
 /**
  * 页面切换核心函数
@@ -582,7 +592,7 @@ void create_pid_control_page(lv_obj_t * parent) {
     lv_group_focus_obj(roller_target);
     printf("PID Page: Objects added to default group and focused\r\n");
 }
-
+//时钟页面
 void create_clock_page(lv_obj_t *parent)
 {
     lv_group_t * g = lv_group_get_default();
@@ -600,13 +610,21 @@ void create_clock_page(lv_obj_t *parent)
     //返回按钮
     lv_obj_t * btn_back = lv_btn_create(parent);
     lv_obj_set_size(btn_back, 60, 30);
-    lv_obj_align(btn_back, LV_ALIGN_BOTTOM_MID, 0, -5);
+    lv_obj_align(btn_back, LV_ALIGN_BOTTOM_LEFT, 0, -5);
     lv_obj_t * lbl_back = lv_label_create(btn_back);
     lv_label_set_text(lbl_back, "Back");
     lv_obj_add_event_cb(btn_back, event_to_main_cb, LV_EVENT_CLICKED, NULL);
+    //创建设置时间按钮
+    lv_obj_t * btn_set_time = lv_btn_create(parent);
+    lv_obj_set_size(btn_set_time, 120, 30);
+    lv_obj_align(btn_set_time, LV_ALIGN_BOTTOM_RIGHT, 0, -5);
+    lv_obj_t * lbl_set_time = lv_label_create(btn_set_time);
+    lv_label_set_text(lbl_set_time, "Set Time");
+    lv_obj_add_event_cb(btn_set_time, event_open_time_setting, LV_EVENT_CLICKED, NULL);
     //加入编码器
     if(g) {
         lv_group_add_obj(g, btn_back);
+        lv_group_add_obj(g, btn_set_time);
     }
     static lv_timer_t * clock_timer = NULL;
     if(clock_timer == NULL) {
@@ -710,7 +728,162 @@ static void event_to_pid_cb(lv_event_t * e) {
     switch_page(create_pid_control_page);
     Buzzer_Beep(100);
 }
+/**
+ * @brief 打开时间设置弹窗
+ */
+static void event_open_time_setting(lv_event_t *e) {
+    LV_UNUSED(e);  // 不使用事件参数
+    
+    // 创建弹窗背景
+    time_setting_popup = lv_obj_create(lv_scr_act());
+    lv_obj_set_size(time_setting_popup, 300, 200);  // 弹窗大小
+    lv_obj_center(time_setting_popup);  // 弹窗居中
+    lv_obj_set_style_bg_color(time_setting_popup, lv_color_hex(0xFFFFFF), 0);  // 白色背景
+    lv_obj_set_style_border_width(time_setting_popup, 2, 0);  // 边框宽度
+    lv_obj_set_style_border_color(time_setting_popup, lv_color_hex(0x333333), 0);  // 灰色边框
+    
+    // 创建标题
+    lv_obj_t *title = lv_label_create(time_setting_popup);
+    lv_label_set_text(title, "Set Time");
+    lv_obj_set_style_text_font(title, &lv_font_montserrat_24, 0);
+    lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 0);  // 顶部居中
+    
+    // ========== 创建小时滑块 ==========
+    lv_obj_t *hour_cont = lv_obj_create(time_setting_popup);
+    lv_obj_set_size(hour_cont, 200, 40);
+    lv_obj_align(hour_cont, LV_ALIGN_TOP_MID, 0, 20);  // 标题下方
+    
+    // 小时标签
+    lv_obj_t *hour_text = lv_label_create(time_setting_popup);
+    lv_label_set_text(hour_text, "Hour");
+    lv_obj_align(hour_text, LV_ALIGN_TOP_LEFT, 0, 20);
+    
+    // 小时滑块
+    hour_slider = lv_slider_create(hour_cont);
+    lv_obj_set_size(hour_slider, 140, 20);
+    lv_obj_align(hour_slider, LV_ALIGN_BOTTOM_LEFT, 0, 0);
+    lv_slider_set_range(hour_slider, 0, 23);  // 范围：0-23
+    
+    // 小时数值显示
+    lv_obj_t *hour_label = lv_label_create(hour_cont);
+    lv_label_set_text_fmt(hour_label, "%02d", 0);
+    lv_obj_align(hour_label, LV_ALIGN_BOTTOM_RIGHT, 0, 0);
+    lv_obj_add_event_cb(hour_slider, time_slider_changed_cb, LV_EVENT_VALUE_CHANGED, hour_label);
+    
+    // ========== 创建分钟滑块（类似小时滑块） ==========
+    lv_obj_t *min_cont = lv_obj_create(time_setting_popup);
+    lv_obj_set_size(min_cont, 200, 40);
+    lv_obj_align(min_cont, LV_ALIGN_TOP_MID, 0, 60);
+    
+    lv_obj_t *min_text = lv_label_create(time_setting_popup);
+    lv_label_set_text(min_text, "Minute");
+    lv_obj_align(min_text, LV_ALIGN_LEFT_MID, 0, 0);
+    
+    min_slider = lv_slider_create(min_cont);
+    lv_obj_set_size(min_slider, 140, 20);
+    lv_obj_align(min_slider, LV_ALIGN_BOTTOM_LEFT, 0, 0);
+    lv_slider_set_range(min_slider, 0, 59);  // 范围：0-59
+    
+    lv_obj_t *min_label = lv_label_create(min_cont);
+    lv_label_set_text_fmt(min_label, "%02d", 0);
+    lv_obj_align(min_label, LV_ALIGN_BOTTOM_RIGHT, 0, 0);
+    lv_obj_add_event_cb(min_slider, time_slider_changed_cb, LV_EVENT_VALUE_CHANGED, min_label);
+    // ========== 创建秒滑块（类似小时滑块） ==========
+    lv_obj_t *sec_cont = lv_obj_create(time_setting_popup);
+    lv_obj_set_size(sec_cont, 200, 40);
+    lv_obj_align(sec_cont, LV_ALIGN_TOP_MID, 0, 100);
+    
+    lv_obj_t *sec_text = lv_label_create(time_setting_popup);
+    lv_label_set_text(sec_text, "Second");
+    lv_obj_align(sec_text, LV_ALIGN_BOTTOM_LEFT, 0, -40);
+    
+    sec_slider = lv_slider_create(sec_cont);
+    lv_obj_set_size(sec_slider, 140, 20);
+    lv_obj_align(sec_slider, LV_ALIGN_BOTTOM_LEFT, 0, 0);
+    lv_slider_set_range(sec_slider, 0, 59);  // 范围：0-59
+    
+    lv_obj_t *sec_label = lv_label_create(sec_cont);
+    lv_label_set_text_fmt(sec_label, "%02d", 0);
+    lv_obj_align(sec_label, LV_ALIGN_BOTTOM_RIGHT, 0, 0);
+    lv_obj_add_event_cb(sec_slider, time_slider_changed_cb, LV_EVENT_VALUE_CHANGED, sec_label);
+    // ========== 创建确认按钮 ==========
+    lv_obj_t *btn_ok = lv_btn_create(time_setting_popup);
+    lv_obj_set_size(btn_ok, 100, 40);
+    lv_obj_align(btn_ok, LV_ALIGN_BOTTOM_RIGHT, 0, 0);
+    lv_obj_t *label_ok = lv_label_create(btn_ok);
+    lv_label_set_text(label_ok, "OK");
+    lv_obj_center(label_ok);
+    lv_obj_add_event_cb(btn_ok, event_set_time_ok, LV_EVENT_CLICKED, NULL);
+    
+    // ========== 创建取消按钮 ==========
+    lv_obj_t *btn_cancel = lv_btn_create(time_setting_popup);
+    lv_obj_set_size(btn_cancel, 100, 40);
+    lv_obj_align(btn_cancel, LV_ALIGN_BOTTOM_LEFT, 0, 0);
+    lv_obj_t *label_cancel = lv_label_create(btn_cancel);
+    lv_label_set_text(label_cancel, "Cancel");
+    lv_obj_center(label_cancel);
+    lv_obj_add_event_cb(btn_cancel, event_set_time_cancel, LV_EVENT_CLICKED, NULL);
+    
+    // ========== 初始化滑块为当前时间 ==========
+    RTC_TimeTypeDef sTime;
+    HAL_RTC_GetTime(&hrtc, &sTime, RTC_FORMAT_BIN);  // 获取当前时间
+    lv_slider_set_value(hour_slider, sTime.Hours, LV_ANIM_ON);  // 设置小时
+    lv_slider_set_value(min_slider, sTime.Minutes, LV_ANIM_ON);  // 设置分钟
+    lv_slider_set_value(sec_slider, sTime.Seconds, LV_ANIM_ON);  // 设置秒
+}
+/**
+ * @brief 确认设置时间
+ */
+static void event_set_time_ok(lv_event_t *e) {
+    LV_UNUSED(e);
+    
+    // 获取滑块的值
+    uint8_t hour = (uint8_t)lv_slider_get_value(hour_slider);
+    uint8_t min = (uint8_t)lv_slider_get_value(min_slider);
+    uint8_t sec = (uint8_t)lv_slider_get_value(sec_slider);
+    
+    // 设置 RTC 时间
+    RTC_TimeTypeDef sTime = {0};
+    sTime.Hours = hour;
+    sTime.Minutes = min;
+    sTime.Seconds = sec;
+    
+    // 调用 HAL 库函数设置时间
+    HAL_RTC_SetTime(&hrtc, &sTime, RTC_FORMAT_BIN);
+    
+    // 关闭弹窗
+    lv_obj_del(time_setting_popup);
+    time_setting_popup = NULL;
+}
 
+/**
+ * @brief 取消设置时间
+ */
+static void event_set_time_cancel(lv_event_t *e) {
+    LV_UNUSED(e);
+    
+    // 关闭弹窗
+    lv_obj_del(time_setting_popup);
+    time_setting_popup = NULL;
+}
+
+/**
+ * @brief 滑块值变化回调
+ */
+static void time_slider_changed_cb(lv_event_t *e) {
+    // 获取事件目标（滑块对象）
+    lv_obj_t *slider = lv_event_get_target(e);
+    // 获取用户数据（标签对象）
+    lv_obj_t *label = (lv_obj_t *)lv_event_get_user_data(e);
+    
+    // 如果标签存在
+    if (label) {
+        // 获取滑块当前值
+        int32_t value = lv_slider_get_value(slider);
+        // 更新标签显示
+        lv_label_set_text_fmt(label, "%02d", value);
+    }
+}
 
 /* USER CODE END FunctionPrototypes */
 
