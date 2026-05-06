@@ -46,7 +46,15 @@ void MX_RTC_Init(void)
   hrtc.Instance = RTC;
   hrtc.Init.HourFormat = RTC_HOURFORMAT_24;
   hrtc.Init.AsynchPrediv = 127;
-  hrtc.Init.SynchPrediv = 249;
+  /* LSE 32768 Hz: 32768/128/256=1 Hz；LSI 仍按约 32 kHz 用 128*250 */
+  if (__HAL_RCC_GET_FLAG(RCC_FLAG_LSERDY) != RESET)
+  {
+    hrtc.Init.SynchPrediv = 255U;
+  }
+  else
+  {
+    hrtc.Init.SynchPrediv = 249U;
+  }
   hrtc.Init.OutPut = RTC_OUTPUT_DISABLE;
   hrtc.Init.OutPutPolarity = RTC_OUTPUT_POLARITY_HIGH;
   hrtc.Init.OutPutType = RTC_OUTPUT_TYPE_OPENDRAIN;
@@ -97,8 +105,16 @@ void HAL_RTC_MspInit(RTC_HandleTypeDef* rtcHandle)
 
   /** Initializes the peripherals clock
   */
+    HAL_PWR_EnableBkUpAccess();
     PeriphClkInitStruct.PeriphClockSelection = RCC_PERIPHCLK_RTC;
-    PeriphClkInitStruct.RTCClockSelection = RCC_RTCCLKSOURCE_LSI;
+    if (__HAL_RCC_GET_FLAG(RCC_FLAG_LSERDY) != RESET)
+    {
+      PeriphClkInitStruct.RTCClockSelection = RCC_RTCCLKSOURCE_LSE;
+    }
+    else
+    {
+      PeriphClkInitStruct.RTCClockSelection = RCC_RTCCLKSOURCE_LSI;
+    }
     if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInitStruct) != HAL_OK)
     {
       Error_Handler();
