@@ -54,7 +54,8 @@ CMakeLists.txt     CMake 工程入口（项目名称可能仍为历史命名 05_
 1. **STM32CubeIDE / Keil / IAR**  
    按你日常使用的工具链打开工程并编译烧录即可（若从 CubeMX 重新生成代码，注意保留 `USER CODE` 段修改）。
 
-2. **CMake（若已配置 `cmake/stm32cubemx` 子工程）**  
+2. **CMake（若已配置 `cmake/stm32cubemx` 子工程）**  ![Uploading IMG_20260326_171555.jpg…]()
+
    - 需本机安装 **ARM GCC**、与 STM32 CMake 插件/Cube 导出结构一致。  
    - 示例（具体以你环境为准）：
      ```bash
@@ -85,3 +86,4 @@ CMakeLists.txt     CMake 工程入口（项目名称可能仍为历史命名 05_
 ## 许可证说明
 
 - ST HAL、CMSIS、FreeRTOS、LVGL 等遵循各自仓库许可证；应用层代码请以你的发布策略为准。
+<img width="4096" height="3072" alt="IMG_20260506_143103" src="https://github.com/user-attachments/assets/354d8b2d-6185-421a-95f2-ddf2417c2a68" />![Uploading IMG_20260326_171526.jpg…]()<img width="4096" height="3072" alt="IMG_20260506_143039" src="https://github.com/user-attachments/assets/3466cb8d-d82c-4233-bb27-38e972468b4d" />
