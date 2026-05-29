@@ -68,7 +68,8 @@ void Error_Handler(void);
 #define BUZZER_GPIO_Port GPIOD
 #define BUZZER_Pin       GPIO_PIN_2
 /* USER CODE BEGIN Private defines */
-
+#define BUZZER_ACTIVE_LEVEL GPIO_PIN_RESET
+#define BUZZER_PASSIVE      0
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus

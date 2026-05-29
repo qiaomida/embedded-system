@@ -1,0 +1,7 @@
+MX更新后
+删rvds的port,删生成的定时回调,删文件rvds
+真的conf在core(内存地址!!)
+osdelay
+spi的格式halfword
+编码器模式重配- 将 Prescaler (分频) 从 9999 改为 0 （编码器模式下必须为 0，以捕捉每一个脉冲）。
+- 将 Period (自动重装值) 从 99 改为 65535 (0xFFFF) （允许计数器在 16 位范围内自由计数）

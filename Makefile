@@ -13,7 +13,7 @@
 ######################################
 # target
 ######################################
-TARGET = 05_dma
+TARGET = ThermoControlPanel
 
 
 ######################################
@@ -39,6 +39,11 @@ C_SOURCES =  \
 Core/Src/main.c \
 Core/Src/gpio.c \
 Core/Src/freertos.c \
+Core/Src/app_ui.c \
+Core/Src/app_control.c \
+Core/Src/app_sensor.c \
+Core/Src/app_buzzer.c \
+Core/Src/app_tasks.c \
 Core/Src/adc.c \
 Core/Src/dma.c \
 Core/Src/tim.c \

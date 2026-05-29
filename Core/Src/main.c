@@ -16,14 +16,14 @@
 #include "tim.h"
 #include "usart.h"
 #include "gpio.h"
-#include "buzzer.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include <stdio.h>
 #include <string.h>
 #include "pid.h"
 #include "key.h"
-#include "control.h"
+#include "app_sensor.h"
+#include "app_control.h"
 #include "params_store.h"
 #include "stdlib.h"
 #include "lv_port_lcd_stm32.h"
@@ -50,9 +50,6 @@
 /* USER CODE BEGIN PV */
 uint16_t pwm_value = 0;
 int8_t direction = 1;
-uint16_t adc_values[2]; // [0]:Vref, [1]:Temp
-float vdd_v = 0;
-float core_temp = 0;
 volatile uint8_t tim4_tick = 0;
 uint16_t print_counter = 0; // 用于控制打印频率的计数器
 #define PRINT_INTERVAL 300 // 每300次中断打印一次
